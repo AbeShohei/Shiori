@@ -1,7 +1,11 @@
 import axios from 'axios';
 import { Travel, TravelFormData } from '../types/Travel';
 
-const API_BASE_URL = 'http://localhost:5000/api';
+// Supabase Edge FunctionsのベースURL
+// 本番環境では実際のSupabaseプロジェクトURLに変更してください
+const API_BASE_URL = process.env.NODE_ENV === 'production' 
+  ? 'https://your-project-ref.supabase.co/functions/v1/travel-api'
+  : 'http://localhost:5000/api';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
