@@ -1,18 +1,35 @@
 import axios from 'axios';
-import { Travel, TravelFormData } from '../types/Travel';
+import { Travel } from '../types/Travel';
 
 // Supabase Edge FunctionsのベースURL
 // 本番環境では実際のSupabaseプロジェクトURLに変更してください
-const API_BASE_URL = process.env.NODE_ENV === 'production' 
-  ? 'https://your-project-ref.supabase.co/functions/v1/travel-api'
-  : 'http://localhost:5000/api';
+const API_BASE_URL = 'https://bhmsmzlyeoenanvpgbbn.supabase.co/functions/v1/ai-app';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
   headers: {
     'Content-Type': 'application/json',
+    'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJobXNtemx5ZW9lbmFudnBnYmJuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTE4NjU2MTYsImV4cCI6MjA2NzQ0MTYxNn0.ur4wVPgJmWHM8fwXUnFIHBONMGddSq7wdY05u1qNh1A',
+    'authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJobXNtemx5ZW9lbmFudnBnYmJuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTE4NjU2MTYsImV4cCI6MjA2NzQ0MTYxNn0.ur4wVPgJmWHM8fwXUnFIHBONMGddSq7wdY05u1qNh1A'
   },
 });
+
+// スケジュール項目の型
+export type ScheduleItem = {
+  time: string;
+  title: string;
+  location: string;
+  description: string;
+  category: string;
+};
+
+// 場所の型
+export type Place = {
+  name: string;
+  category: string;
+  rating: number;
+  description: string;
+};
 
 export interface CreateTravelRequest {
   title: string;
@@ -24,8 +41,8 @@ export interface CreateTravelRequest {
   interests: string[];
   travelStyle: string;
   description: string;
-  schedule?: any[];
-  places?: any[];
+  schedule?: ScheduleItem[];
+  places?: Place[];
   budgetBreakdown?: {
     transportation: number;
     accommodation: number;
@@ -119,42 +136,70 @@ export interface GenerateRecommendationsResponse {
 export const travelApi = {
   // 全ての旅行を取得
   getAll: async (): Promise<Travel[]> => {
-    const response = await api.get('/travels');
+    const response = await api.get('/api/travels', {
+      headers: {
+        'authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJobXNtemx5ZW9lbmFudnBnYmJuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTE4NjU2MTYsImV4cCI6MjA2NzQ0MTYxNn0.ur4wVPgJmWHM8fwXUnFIHBONMGddSq7wdY05u1qNh1A'
+      }
+    });
     return response.data;
   },
 
   // 特定の旅行を取得
   getById: async (id: string): Promise<Travel> => {
-    const response = await api.get(`/travels/${id}`);
+    const response = await api.get(`/api/travels/${id}`, {
+      headers: {
+        'authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJobXNtemx5ZW9lbmFudnBnYmJuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTE4NjU2MTYsImV4cCI6MjA2NzQ0MTYxNn0.ur4wVPgJmWHM8fwXUnFIHBONMGddSq7wdY05u1qNh1A'
+      }
+    });
     return response.data;
   },
 
   // AIプランを生成
   generatePlan: async (planData: GeneratePlanRequest): Promise<GeneratePlanResponse> => {
-    const response = await api.post('/travels/generate-plan', planData);
+    const response = await api.post('/api/travels/generate-plan', planData, {
+      headers: {
+        'authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJobXNtemx5ZW9lbmFudnBnYmJuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTE4NjU2MTYsImV4cCI6MjA2NzQ0MTYxNn0.ur4wVPgJmWHM8fwXUnFIHBONMGddSq7wdY05u1qNh1A'
+      }
+    });
     return response.data;
   },
 
   // 新しい旅行を作成
   create: async (travelData: CreateTravelRequest): Promise<Travel> => {
-    const response = await api.post('/travels', travelData);
+    const response = await api.post('/api/travels', travelData, {
+      headers: {
+        'authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJobXNtemx5ZW9lbmFudnBnYmJuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTE4NjU2MTYsImV4cCI6MjA2NzQ0MTYxNn0.ur4wVPgJmWHM8fwXUnFIHBONMGddSq7wdY05u1qNh1A'
+      }
+    });
     return response.data;
   },
 
   // 旅行を更新
   update: async (id: string, travelData: Partial<Travel>): Promise<Travel> => {
-    const response = await api.put(`/travels/${id}`, travelData);
+    const response = await api.put(`/api/travels/${id}`, travelData, {
+      headers: {
+        'authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJobXNtemx5ZW9lbmFudnBnYmJuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTE4NjU2MTYsImV4cCI6MjA2NzQ0MTYxNn0.ur4wVPgJmWHM8fwXUnFIHBONMGddSq7wdY05u1qNh1A'
+      }
+    });
     return response.data;
   },
 
   // 旅行を削除
   delete: async (id: string): Promise<void> => {
-    await api.delete(`/travels/${id}`);
+    await api.delete(`/api/travels/${id}`, {
+      headers: {
+        'authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJobXNtemx5ZW9lbmFudnBnYmJuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTE4NjU2MTYsImV4cCI6MjA2NzQ0MTYxNn0.ur4wVPgJmWHM8fwXUnFIHBONMGddSq7wdY05u1qNh1A'
+      }
+    });
   },
 
   // 画像OCR＋人名抽出
   extractNamesFromImage: async (imageBase64: string): Promise<string[]> => {
-    const response = await api.post('/travels/extract-names-from-image', { imageBase64 });
+    const response = await api.post('/api/travels/extract-names-from-image', { imageBase64 }, {
+      headers: {
+        'authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJobXNtemx5ZW9lbmFudnBnYmJuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTE4NjU2MTYsImV4cCI6MjA2NzQ0MTYxNn0.ur4wVPgJmWHM8fwXUnFIHBONMGddSq7wdY05u1qNh1A'
+      }
+    });
     return response.data.names;
   },
 };

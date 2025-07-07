@@ -90,12 +90,4 @@ enable_signup = true
 # If enabled, users need to confirm their phone number before signing in.
 enable_confirmations = false
 # Template for sending a confirmation message when a user signs up with a phone number or changes their phone number.
-template = "Your code is {{ .Code }}"
-
-[edge_functions]
-# Configure one of the supported runtimes: "deno" or "node"
-runtime = "deno"
-# Configure the maximum execution time for edge functions in seconds.
-max_execution_time = 60
-# Configure the maximum payload size for edge functions in bytes.
-max_payload_size = 6291456 
+template = "Your code is {{ .Code }}" 

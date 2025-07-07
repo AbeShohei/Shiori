@@ -127,3 +127,43 @@ const API_BASE_URL = 'https://your-project-ref.supabase.co/functions/v1/travel-a
 ### ログの確認
 
 Supabase Dashboardの「Edge Functions」→「travel-api」→「Logs」でログを確認できます。 
+
+## 1. Supabase CLIのインストールができない場合
+
+### よくあるエラー
+- `npm install -g supabase` でエラーが出る
+- 権限エラーや「グローバルインストールはサポートされていません」と表示される
+
+### 対処法
+#### A. PowerShellでインストール（Windows向け公式推奨）
+PowerShellを「管理者として実行」し、下記コマンドをコピー＆ペーストしてください。
+
+```powershell
+iwr -useb https://cli.supabase.com/install.ps1 | iex
+```
+
+#### B. Homebrew（Mac/Linuxの場合）
+```bash
+brew install supabase/tap/supabase
+```
+
+---
+
+## 2. それでもダメな場合
+
+- エラー内容をコピーして、ここに貼り付けてください。
+- どの手順で止まったか、どんな表示が出たか教えてください。
+
+---
+
+## 3. どうしてもCLIが使えない場合
+
+- Supabaseダッシュボードの「Edge Functions」から**ブラウザで直接デプロイ**も可能です。
+- `supabase/functions/travel-api/index.ts` の内容をコピーして、ダッシュボードで新規関数として貼り付け、「Deploy」ボタンを押すだけです。
+
+---
+
+### どこで詰まっているか、もう少し詳しく教えていただけますか？  
+（例：「インストールでエラー」「ログインできない」「デプロイで失敗」など）
+
+一緒に解決しましょう！ 
