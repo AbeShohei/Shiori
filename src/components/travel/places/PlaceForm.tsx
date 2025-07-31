@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import Input from '../../common/Input';
 import Button from '../../common/Button';
+import { Place } from '../../../services/travelApi';
 
 /**
  * 観光スポットの型定義
@@ -18,6 +19,11 @@ interface Place {
   openingHours: string;
   priceRange: string;
   isFavorite: boolean;
+}
+
+// Place型の定義の直後にformData型を拡張
+interface PlaceFormData extends Place {
+  mainCategory?: string;
 }
 
 /**
@@ -39,7 +45,7 @@ interface PlaceFormProps {
  */
 const PlaceForm: React.FC<PlaceFormProps> = ({ place, onSave, onCancel }) => {
   // フォームデータ
-  const [formData, setFormData] = useState<Partial<Place>>({
+  const [formData, setFormData] = useState<Partial<PlaceFormData>>({
     name: '',
     category: '史跡・遺跡',
     rating: 4.0,
@@ -58,6 +64,23 @@ const PlaceForm: React.FC<PlaceFormProps> = ({ place, onSave, onCancel }) => {
     '史跡・遺跡', 'テーマパーク', '自然・景勝地', 'グルメ', 
     'ショッピング', '温泉・スパ', 'アクティビティ', 'その他'
   ];
+
+  // メインカテゴリ選択肢
+  const mainCategories = ['観光', '食事', '交通', '宿泊', 'その他'];
+
+  // サブカテゴリ→メインカテゴリのマッピング
+  const subToMainCategory: { [key: string]: string } = {
+    '史跡・遺跡': '観光',
+    'テーマパーク': '観光',
+    '自然・景勝地': '観光',
+    'ショッピング': '観光',
+    '温泉・スパ': '観光',
+    'アクティビティ': '観光',
+    'グルメ': '食事',
+    '交通': '交通',
+    '宿泊': '宿泊',
+    'その他': '観光',
+  };
 
   /**
    * 編集時に入力データを初期化
@@ -83,7 +106,7 @@ const PlaceForm: React.FC<PlaceFormProps> = ({ place, onSave, onCancel }) => {
   /**
    * 入力フィールドの値を更新
    */
-  const handleInputChange = (field: keyof Place, value: string | number | boolean) => {
+  const handleInputChange = (field: keyof PlaceFormData, value: string | number | boolean) => {
     setFormData(prev => ({
       ...prev,
       [field]: value
@@ -99,7 +122,8 @@ const PlaceForm: React.FC<PlaceFormProps> = ({ place, onSave, onCancel }) => {
       formData.description?.trim() !== '' &&
       formData.address?.trim() !== '' &&
       formData.openingHours?.trim() !== '' &&
-      formData.priceRange?.trim() !== ''
+      formData.priceRange?.trim() !== '' &&
+      formData.mainCategory
     );
   };
 
@@ -109,9 +133,10 @@ const PlaceForm: React.FC<PlaceFormProps> = ({ place, onSave, onCancel }) => {
   const handleSave = () => {
     if (isFormValid()) {
       const newPlace: Place = {
-        id: place?.id || Date.now().toString(),
+        id: place?.id || (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Date.now().toString() + Math.random().toString(36).slice(2)),
         name: formData.name!,
-        category: formData.category!,
+        category: formData.category!, // サブカテゴリのみ
+        mainCategory: formData.mainCategory!, // mainCategoryも保存
         rating: formData.rating!,
         image: formData.image || 'https://images.pexels.com/photos/1008155/pexels-photo-1008155.jpeg?auto=compress&cs=tinysrgb&w=400',
         description: formData.description!,
@@ -143,18 +168,38 @@ const PlaceForm: React.FC<PlaceFormProps> = ({ place, onSave, onCancel }) => {
             required
           />
           
+          {/* カテゴリ入力部分を修正 */}
           <div className="space-y-1">
-            <label htmlFor="category-select" className="block text-sm font-medium text-gray-700">
-              カテゴリ
+            <label htmlFor="category-input" className="block text-sm font-medium text-gray-700">
+              カテゴリ（バッジ表示・10文字まで）
+            </label>
+            <input
+              id="category-input"
+              type="text"
+              maxLength={10}
+              value={formData.category || ''}
+              onChange={e => handleInputChange('category', e.target.value)}
+              className="block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+              placeholder="例: 史跡・遺跡"
+              required
+            />
+          </div>
+          
+          {/* カテゴリ入力部分の直後にメインカテゴリ選択を追加 */}
+          <div className="space-y-1">
+            <label htmlFor="main-category-select" className="block text-sm font-medium text-gray-700">
+              メインカテゴリ（グループ見出し用）
             </label>
             <select
-              id="category-select"
-              value={formData.category}
-              onChange={(e) => handleInputChange('category', e.target.value)}
+              id="main-category-select"
+              value={formData.mainCategory || ''}
+              onChange={e => handleInputChange('mainCategory', e.target.value)}
               className="block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+              required
             >
-              {categories.map(category => (
-                <option key={category} value={category}>{category}</option>
+              <option value="" disabled>選択してください</option>
+              {mainCategories.map(cat => (
+                <option key={cat} value={cat}>{cat}</option>
               ))}
             </select>
           </div>

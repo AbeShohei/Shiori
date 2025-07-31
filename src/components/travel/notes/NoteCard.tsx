@@ -10,6 +10,7 @@ interface Note {
   content: string;
   category: string;
   createdAt: string;
+  updatedAt?: string;
   isPinned: boolean;
 }
 
@@ -53,57 +54,48 @@ const NoteCard: React.FC<NoteCardProps> = ({
   };
 
   return (
-    <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 hover:shadow-md transition-shadow">
-      {/* ヘッダー */}
-      <div className="flex items-start justify-between mb-3">
-        <div className="flex items-center gap-2">
-          <h3 className="font-semibold text-gray-900">{note.title}</h3>
-          {note.isPinned && (
-            <Star className="h-4 w-4 text-yellow-500 fill-current" />
-          )}
-        </div>
-        
-        {/* 操作ボタン */}
-        <div className="flex gap-1">
-          <button
-            onClick={() => onTogglePin(note.id)}
-            className="p-1 text-gray-400 hover:text-yellow-500 transition-colors"
-            aria-label={note.isPinned ? 'ピン留めを解除' : 'ピン留めする'}
-          >
-            <Star className={`h-4 w-4 ${note.isPinned ? 'text-yellow-500 fill-current' : ''}`} />
-          </button>
-          <button 
-            onClick={() => onEdit(note)}
-            className="p-1 text-gray-400 hover:text-blue-600 transition-colors"
-            aria-label="メモを編集"
-          >
-            <Edit3 className="h-4 w-4" />
-          </button>
-          <button 
-            onClick={() => onDelete(note.id)}
-            className="p-1 text-gray-400 hover:text-red-600 transition-colors"
-            aria-label="メモを削除"
-          >
-            <Trash2 className="h-4 w-4" />
-          </button>
-        </div>
+    <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 hover:shadow-md transition-shadow relative">
+      {/* 操作ボタン（右上） */}
+      <div className="absolute top-4 right-4 flex gap-1 z-10">
+        <button
+          onClick={() => onTogglePin(note.id)}
+          className="p-1 text-gray-400 hover:text-yellow-500 transition-colors"
+          aria-label={note.isPinned ? 'ピン留めを解除' : 'ピン留めする'}
+        >
+          <Star className={`h-4 w-4 ${note.isPinned ? 'text-yellow-500 fill-current' : ''}`} />
+        </button>
+        <button 
+          onClick={() => onEdit(note)}
+          className="p-1 text-gray-400 hover:text-blue-600 transition-colors"
+          aria-label="メモを編集"
+        >
+          <Edit3 className="h-4 w-4" />
+        </button>
+        <button 
+          onClick={() => onDelete(note.id)}
+          className="p-1 text-gray-400 hover:text-red-600 transition-colors"
+          aria-label="メモを削除"
+        >
+          <Trash2 className="h-4 w-4" />
+        </button>
       </div>
-      
+      {/* ヘッダー（タイトルのみ） */}
+      <div className="flex items-center gap-2 mb-2">
+        <h3 className="font-semibold text-gray-900">{note.title}</h3>
+      </div>
       {/* カテゴリ */}
       <div className="mb-3">
         <span className={`px-2 py-1 rounded-full text-xs font-medium ${getCategoryColor(note.category)}`}>
           {note.category}
         </span>
       </div>
-      
       {/* 内容 */}
       <div className="text-sm text-gray-600 mb-3">
         <pre className="whitespace-pre-wrap font-sans">{note.content}</pre>
       </div>
-      
-      {/* 作成日 */}
+      {/* 更新日 */}
       <div className="text-xs text-gray-400">
-        {note.createdAt}
+        {note.updatedAt ? note.updatedAt : note.createdAt}
       </div>
     </div>
   );

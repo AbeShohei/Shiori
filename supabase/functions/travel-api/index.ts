@@ -1,199 +1,160 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { GoogleGenerativeAI } from 'https://esm.sh/@google/generative-ai@0.24.1'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-interface Travel {
-  id?: string;
-  title: string;
-  description: string;
-  startDate: string;
-  endDate: string;
-  destination: string;
-  budget: number;
-  participants: string[];
-  created_at?: string;
-  updated_at?: string;
-}
-
 serve(async (req) => {
-  // CORS preflight requests
+  // CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
 
   try {
-    // Supabaseクライアントの初期化
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-    const supabase = createClient(supabaseUrl, supabaseServiceKey)
-
-    const { pathname } = new URL(req.url)
-    const method = req.method
-
-    // ヘルスチェック
-    if (pathname === '/health' && method === 'GET') {
-      return new Response(
-        JSON.stringify({ message: 'Travel App API is running' }),
-        { 
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          status: 200 
-        }
-      )
-    }
-
-    // 旅行データの取得
-    if (pathname === '/api/travels' && method === 'GET') {
-      const { data, error } = await supabase
-        .from('travels')
-        .select('*')
-        .order('created_at', { ascending: false })
-
-      if (error) throw error
-
-      return new Response(
-        JSON.stringify(data),
-        { 
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          status: 200 
-        }
-      )
-    }
-
-    // 旅行データの作成
-    if (pathname === '/api/travels' && method === 'POST') {
-      const body: Travel = await req.json()
-      
-      const { data, error } = await supabase
-        .from('travels')
-        .insert([body])
-        .select()
-
-      if (error) throw error
-
-      return new Response(
-        JSON.stringify(data[0]),
-        { 
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          status: 201 
-        }
-      )
-    }
-
-    // 特定の旅行データの取得
-    if (pathname.match(/^\/api\/travels\/[^\/]+$/) && method === 'GET') {
-      const id = pathname.split('/').pop()
-      
-      const { data, error } = await supabase
-        .from('travels')
-        .select('*')
-        .eq('id', id)
-        .single()
-
-      if (error) throw error
-
-      return new Response(
-        JSON.stringify(data),
-        { 
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          status: 200 
-        }
-      )
-    }
-
-    // 旅行データの更新
-    if (pathname.match(/^\/api\/travels\/[^\/]+$/) && method === 'PUT') {
-      const id = pathname.split('/').pop()
-      const body: Partial<Travel> = await req.json()
-      
-      const { data, error } = await supabase
-        .from('travels')
-        .update(body)
-        .eq('id', id)
-        .select()
-
-      if (error) throw error
-
-      return new Response(
-        JSON.stringify(data[0]),
-        { 
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          status: 200 
-        }
-      )
-    }
-
-    // 旅行データの削除
-    if (pathname.match(/^\/api\/travels\/[^\/]+$/) && method === 'DELETE') {
-      const id = pathname.split('/').pop()
-      
-      const { error } = await supabase
-        .from('travels')
-        .delete()
-        .eq('id', id)
-
-      if (error) throw error
-
-      return new Response(
-        JSON.stringify({ message: 'Travel deleted successfully' }),
-        { 
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          status: 200 
-        }
-      )
-    }
-
-    // AI推奨機能
-    if (pathname === '/api/ai-recommendations' && method === 'POST') {
-      const { preferences } = await req.json()
-      
-      const genAI = new GoogleGenerativeAI(Deno.env.get('GOOGLE_AI_API_KEY')!)
-      const model = genAI.getGenerativeModel({ model: "gemini-pro" })
-
-      const prompt = `旅行の好みに基づいて推奨プランを提案してください：
-      好み: ${JSON.stringify(preferences)}
-      
-      以下の形式で回答してください：
-      - 推奨目的地
-      - 推奨期間
-      - 予算の目安
-      - 推奨アクティビティ
-      - 注意点`
-
-      const result = await model.generateContent(prompt)
-      const response = await result.response
-      const text = response.text()
-
-      return new Response(
-        JSON.stringify({ recommendation: text }),
-        { 
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          status: 200 
-        }
-      )
-    }
-
-    // 404エラー
-    return new Response(
-      JSON.stringify({ message: 'エンドポイントが見つかりません' }),
-      { 
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 404 
+    // Supabaseクライアントの作成
+    const supabaseClient = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+      {
+        global: {
+          headers: { Authorization: req.headers.get('Authorization')! },
+        },
       }
     )
 
+    // ユーザー認証チェック
+    const {
+      data: { user },
+      error: authError,
+    } = await supabaseClient.auth.getUser()
+
+    if (authError || !user) {
+      return new Response(
+        JSON.stringify({ error: '認証が必要です' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    const { pathname } = new URL(req.url)
+    const pathParts = pathname.split('/')
+    const resource = pathParts[1] // 'travels'
+    const id = pathParts[2]
+
+    switch (req.method) {
+      case 'GET':
+        if (id) {
+          // 特定の旅行を取得
+          const { data, error } = await supabaseClient
+            .from('travel')
+            .select('*')
+            .eq('id', id)
+            .single()
+
+          if (error) {
+            return new Response(
+              JSON.stringify({ error: error.message }),
+              { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            )
+          }
+
+          return new Response(
+            JSON.stringify(data),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
+        } else {
+          // 旅行一覧を取得
+          const { data, error } = await supabaseClient
+            .from('travel')
+            .select('*')
+            .order('created_at', { ascending: false })
+
+          if (error) {
+            return new Response(
+              JSON.stringify({ error: error.message }),
+              { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            )
+          }
+
+          return new Response(
+            JSON.stringify(data),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
+        }
+
+      case 'POST':
+        // 新しい旅行を作成
+        const body = await req.json()
+        const { data, error } = await supabaseClient
+          .from('travel')
+          .insert([body])
+          .select()
+          .single()
+
+        if (error) {
+          return new Response(
+            JSON.stringify({ error: error.message }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
+        }
+
+        return new Response(
+          JSON.stringify(data),
+          { status: 201, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+
+      case 'PUT':
+        // 旅行を更新
+        const updateBody = await req.json()
+        const { data: updateData, error: updateError } = await supabaseClient
+          .from('travel')
+          .update(updateBody)
+          .eq('id', id)
+          .select()
+          .single()
+
+        if (updateError) {
+          return new Response(
+            JSON.stringify({ error: updateError.message }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
+        }
+
+        return new Response(
+          JSON.stringify(updateData),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+
+      case 'DELETE':
+        // 旅行を削除
+        const { error: deleteError } = await supabaseClient
+          .from('travel')
+          .delete()
+          .eq('id', id)
+
+        if (deleteError) {
+          return new Response(
+            JSON.stringify({ error: deleteError.message }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
+        }
+
+        return new Response(
+          JSON.stringify({ message: '削除しました' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+
+      default:
+        return new Response(
+          JSON.stringify({ error: 'Method not allowed' }),
+          { status: 405, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+    }
   } catch (error) {
-    console.error('Error:', error)
     return new Response(
-      JSON.stringify({ message: 'サーバーエラーが発生しました', error: error.message }),
-      { 
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 500 
-      }
+      JSON.stringify({ error: error.message }),
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
   }
 }) 

@@ -6,13 +6,15 @@ import Button from '../../common/Button';
  * 部屋の型定義
  */
 interface Room {
-  id: string;
+  // id: string; // ←削除
+  room_number: string; // ←追加
   name: string;
   type: string;
   capacity: number;
   pricePerNight: number;
   amenities: string[];
   isAvailable: boolean;
+  stay_dates: string[]; // 泊まる日付配列を追加
 }
 
 /**
@@ -25,6 +27,9 @@ interface RoomFormProps {
   existingRooms?: Room[]; // 既存の部屋リスト（部屋タイプ選択用）
   isBulkAdd?: boolean; // 一括追加モード
   onBulkSave?: (rooms: Room[]) => void; // 一括保存用
+  travelDates?: string[]; // 旅行日付の配列をpropsで受け取る
+  travelStartDate?: string;
+  travelEndDate?: string;
 }
 
 /**
@@ -37,16 +42,22 @@ const RoomForm: React.FC<RoomFormProps> = ({
   onCancel, 
   existingRooms = [], 
   isBulkAdd = false,
-  onBulkSave 
+  onBulkSave,
+  travelDates = [], // 旅行日付の配列をpropsで受け取る
+  travelStartDate = '',
+  travelEndDate = '',
 }) => {
-  const [formData, setFormData] = useState<Omit<Room, 'id'> & { roomNumber: string }>({
+  const [formData, setFormData] = useState<Omit<Room, 'room_number'> & { roomNumber: string, checkIn: string, checkOut: string }>({
     name: '',
     type: '',
     capacity: 2,
     pricePerNight: 0,
     amenities: [],
     isAvailable: true,
-    roomNumber: ''
+    roomNumber: '',
+    checkIn: travelStartDate,
+    checkOut: travelEndDate,
+    stayDates: []
   });
   const [newAmenity, setNewAmenity] = useState('');
   
@@ -55,7 +66,8 @@ const RoomForm: React.FC<RoomFormProps> = ({
     selectedRoomType: '',
     roomCount: 1,
     startRoomNumber: '',
-    baseName: ''
+    baseName: '',
+    nights: 1 // 一括追加用にも泊数
   });
 
   // 既存の部屋タイプを取得
@@ -74,7 +86,9 @@ const RoomForm: React.FC<RoomFormProps> = ({
         pricePerNight: room.pricePerNight,
         amenities: [...room.amenities],
         isAvailable: room.isAvailable,
-        roomNumber: room.id
+        roomNumber: room.room_number,
+        checkIn: room.check_in || '',
+        checkOut: room.check_out || '',
       });
     }
   }, [room]);
@@ -82,7 +96,7 @@ const RoomForm: React.FC<RoomFormProps> = ({
   /**
    * フォームデータを更新
    */
-  const handleInputChange = (field: keyof Omit<Room, 'id'> | 'roomNumber', value: any) => {
+  const handleInputChange = (field: keyof Omit<Room, 'room_number'> | 'roomNumber' | 'checkIn' | 'checkOut', value: any) => {
     setFormData(prev => ({
       ...prev,
       [field]: value
@@ -103,16 +117,24 @@ const RoomForm: React.FC<RoomFormProps> = ({
    * 部屋番号の連番を生成
    */
   const generateRoomNumbers = (startNumber: string, count: number): string[] => {
-    const start = parseInt(startNumber) || 1;
+    const start = parseInt(startNumber) || 101;
     return Array.from({ length: count }, (_, i) => (start + i).toString());
   };
+
+  // デフォルトの開始部屋番号を101に
+  useEffect(() => {
+    if (isBulkAdd && !bulkData.startRoomNumber) {
+      handleBulkInputChange('startRoomNumber', '101');
+    }
+    // eslint-disable-next-line
+  }, [isBulkAdd]);
 
   /**
    * 部屋名の連番を生成
    */
   const generateRoomNames = (baseName: string, count: number): string[] => {
     return Array.from({ length: count }, (_, i) => 
-      count === 1 ? baseName : `${baseName} ${i + 1}`
+      count === 1 ? baseName : `部屋${i + 1}`
     );
   };
 
@@ -127,13 +149,18 @@ const RoomForm: React.FC<RoomFormProps> = ({
     const roomNames = generateRoomNames(bulkData.baseName, bulkData.roomCount);
 
     const newRooms: Room[] = roomNumbers.map((roomNumber, index) => ({
-      id: roomNumber,
-      name: roomNames[index],
+      room_number: roomNumber, // ←id→room_number
+      room_name: roomNames[index], // ←name→room_name
       type: selectedRoomInfo.type,
       capacity: selectedRoomInfo.capacity,
       pricePerNight: selectedRoomInfo.pricePerNight,
       amenities: [...selectedRoomInfo.amenities],
-      isAvailable: true
+      isavailable: true, // ←小文字で送信
+      stay_dates: Array.from({ length: bulkData.nights }, (_, i) => {
+        const date = new Date();
+        date.setDate(date.getDate() + i);
+        return date.toISOString().split('T')[0];
+      }) // 泊数を反映
     }));
 
     if (onBulkSave) {
@@ -164,21 +191,42 @@ const RoomForm: React.FC<RoomFormProps> = ({
     }));
   };
 
+  // チェックイン・チェックアウト日からstay_datesを自動生成
+  const getStayDates = (checkIn: string, checkOut: string): string[] => {
+    if (!checkIn || !checkOut) return [];
+    const dates = [];
+    let current = new Date(checkIn);
+    const end = new Date(checkOut);
+    while (current < end) {
+      dates.push(current.toISOString().split('T')[0]);
+      current.setDate(current.getDate() + 1);
+    }
+    return dates;
+  };
+
   /**
    * フォームを送信
    */
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (formData.name.trim() && formData.type.trim() && formData.pricePerNight > 0 && formData.roomNumber.trim()) {
-      onSave({
-        id: formData.roomNumber.trim(),
-        name: formData.name,
+    // stay_datesの生成・セットを削除
+    if (formData.name.trim() && formData.type.trim() && formData.pricePerNight > 0 && formData.roomNumber.trim() && formData.checkIn && formData.checkOut) {
+      const roomData: any = {
+        room_number: formData.roomNumber.trim(),
+        room_name: formData.name,
         type: formData.type,
         capacity: formData.capacity,
         pricePerNight: formData.pricePerNight,
         amenities: formData.amenities,
-        isAvailable: formData.isAvailable
-      });
+        isavailable: formData.isAvailable,
+        check_in: formData.checkIn,
+        check_out: formData.checkOut
+      };
+      // 編集時はidも渡す
+      if (room && (room as any).id) {
+        roomData.id = (room as any).id;
+      }
+      onSave(roomData);
     }
   };
 
@@ -270,8 +318,25 @@ const RoomForm: React.FC<RoomFormProps> = ({
               required
             />
             <p className="text-xs text-gray-500 mt-1">
-              {bulkData.roomCount > 1 ? `複数部屋の場合: "${bulkData.baseName} 1", "${bulkData.baseName} 2"...` : 'そのまま使用されます'}
+              {bulkData.roomCount > 1 ? `複数部屋の場合: "部屋1", "部屋2"...` : 'そのまま使用されます'}
             </p>
+          </div>
+
+          {/* 泊数 */}
+          <div>
+            <label htmlFor="bulkNights" className="block text-sm font-medium text-gray-700 mb-2">
+              泊数 *
+            </label>
+            <input
+              type="number"
+              id="bulkNights"
+              value={bulkData.nights}
+              onChange={e => handleBulkInputChange('nights', Math.max(1, parseInt(e.target.value) || 1))}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              min={1}
+              required
+            />
+            <p className="text-xs text-gray-500 mt-1">1泊以上で入力してください</p>
           </div>
 
           {/* プレビュー */}
@@ -281,7 +346,7 @@ const RoomForm: React.FC<RoomFormProps> = ({
               <div className="space-y-1">
                 {generateRoomNumbers(bulkData.startRoomNumber, bulkData.roomCount).map((roomNumber, index) => (
                   <div key={roomNumber} className="text-sm text-blue-700">
-                    <strong>部屋{roomNumber}:</strong> {generateRoomNames(bulkData.baseName, bulkData.roomCount)[index]} 
+                    <strong>部屋{index + 1}:</strong> {generateRoomNames(bulkData.baseName, bulkData.roomCount)[index]} 
                     ({selectedRoomInfo?.type}, {selectedRoomInfo?.capacity}人, ¥{selectedRoomInfo?.pricePerNight.toLocaleString()})
                   </div>
                 ))}
@@ -300,7 +365,7 @@ const RoomForm: React.FC<RoomFormProps> = ({
             <input
               type="text"
               id="roomNumber"
-              value={formData.roomNumber}
+              value={formData.roomNumber || ''}
               onChange={(e) => {
                 const value = e.target.value.replace(/[^0-9]/g, '');
                 handleInputChange('roomNumber', value);
@@ -320,7 +385,7 @@ const RoomForm: React.FC<RoomFormProps> = ({
             <input
               type="text"
               id="roomName"
-              value={formData.name}
+              value={formData.name || ''}
               onChange={(e) => handleInputChange('name', e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               placeholder="例: オーシャンビュー ツイン"
@@ -380,7 +445,10 @@ const RoomForm: React.FC<RoomFormProps> = ({
               type="number"
               id="pricePerNight"
               value={formData.pricePerNight}
-              onChange={(e) => handleInputChange('pricePerNight', parseInt(e.target.value) || 0)}
+              onChange={(e) => {
+                const value = e.target.value;
+                handleInputChange('pricePerNight', value === '' ? '' : parseInt(value));
+              }}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               placeholder="例: 12000"
               min="0"
@@ -444,6 +512,33 @@ const RoomForm: React.FC<RoomFormProps> = ({
               利用可能
             </label>
           </div>
+
+          {/* チェックイン・チェックアウト日選択UI */}
+          <div className="flex gap-4">
+            <div className="flex-1">
+              <label htmlFor="checkIn" className="block text-sm font-medium text-gray-700 mb-2">チェックイン日 *</label>
+              <input
+                type="date"
+                id="checkIn"
+                value={formData.checkIn}
+                onChange={e => handleInputChange('checkIn', e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                required
+              />
+            </div>
+            <div className="flex-1">
+              <label htmlFor="checkOut" className="block text-sm font-medium text-gray-700 mb-2">チェックアウト日 *</label>
+              <input
+                type="date"
+                id="checkOut"
+                value={formData.checkOut}
+                onChange={e => handleInputChange('checkOut', e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                required
+              />
+            </div>
+          </div>
+          <p className="text-xs text-gray-500 mt-1">チェックイン日からチェックアウト日の前日までが宿泊日となります</p>
         </>
       )}
 

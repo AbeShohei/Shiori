@@ -12,6 +12,7 @@ interface Room {
   pricePerNight: number;
   amenities: string[];
   isAvailable: boolean;
+  room_number: string; // 部屋番号を追加
 }
 
 /**
@@ -64,7 +65,7 @@ const RoomCard: React.FC<RoomCardProps> = ({
         <div className="min-w-0 flex-1">
                                   <div className="flex items-center gap-2 mb-1">
               <div className="flex items-center justify-center w-10 h-10 bg-blue-100 text-blue-600 rounded-full text-sm font-semibold">
-                {room.id}
+                {room.room_number}
               </div>
               <h3 className="text-lg font-semibold text-gray-900 truncate">{room.name}</h3>
               <div className="flex items-center gap-1">
@@ -166,7 +167,7 @@ const RoomCard: React.FC<RoomCardProps> = ({
                 );
                 if (unassignedMembers.length > 0) {
                   // 最初の未割り当てメンバーを割り当て
-                  onAssignMember(unassignedMembers[0].id, room.id);
+                  onAssignMember(unassignedMembers[0].id, room.room_number);
                 }
               }}
               className="px-2 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
@@ -191,7 +192,7 @@ const RoomCard: React.FC<RoomCardProps> = ({
                   <span className="text-sm font-medium text-gray-900">{member.name}</span>
                 </div>
                 <button
-                  onClick={() => onRemoveMember(member.id, room.id)}
+                  onClick={() => onRemoveMember(member.id, room.room_number)}
                   className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
                   aria-label="メンバーを削除"
                 >

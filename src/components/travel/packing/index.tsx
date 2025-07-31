@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Plus, Settings, Globe, MapPin } from 'lucide-react';
 import PackingProgress from './PackingProgress';
 import PackingItemComponent from './PackingItem';
@@ -7,6 +7,7 @@ import Modal from '../../common/Modal';
 import DeleteConfirmModal from '../TravelCatalog/DeleteConfirmModal';
 import Button from '../../common/Button';
 import Input from '../../common/Input';
+import { packingApi, PackingItem as PackingItemDB } from '../../../services/packingApi';
 
 /**
  * パッキングアイテムの型定義
@@ -39,6 +40,8 @@ type TravelType = 'domestic' | 'international';
  * パッキングタブコンポーネントのプロパティ
  */
 interface PackingTabProps {
+  travelId: string;
+  userId: string;
   packingData?: PackingData[];
   travelType?: TravelType;
 }
@@ -108,123 +111,114 @@ const internationalTemplate: PackingItem[] = [
  * パッキングタブコンポーネント
  * パッキングリストの管理、アイテムの追加・編集・削除機能を提供
  */
-const PackingTab: React.FC<PackingTabProps> = ({ packingData, travelType = 'domestic' }) => {
-  // パッキングアイテムデータの状態
-  const [items, setItems] = useState<PackingItem[]>([]);
-
-  // カテゴリの状態
+const PackingTab: React.FC<PackingTabProps> = ({ travelId, userId, packingData, travelType = 'domestic' }) => {
+  const [items, setItems] = useState<PackingItemDB[]>([]);
   const [categories, setCategories] = useState<string[]>([
     '書類', '衣類', '美容・健康', 'アクセサリー', '電子機器', 'その他'
   ]);
-
-  // モーダルの状態
   const [showAddItemModal, setShowAddItemModal] = useState(false);
   const [showEditItemModal, setShowEditItemModal] = useState(false);
   const [showAddCategoryModal, setShowAddCategoryModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [editingItem, setEditingItem] = useState<PackingItem | null>(null);
+  const [editingItem, setEditingItem] = useState<PackingItemDB | null>(null);
   const [deletingItemId, setDeletingItemId] = useState<string | null>(null);
   const [newCategory, setNewCategory] = useState('');
+  const initializedRef = useRef(false);
 
-  // AI生成のパッキングデータとテンプレートを初期アイテムとして設定
-  useEffect(() => {
-    let initialItems: PackingItem[] = [];
-
-    // 旅行タイプに応じてテンプレートを適用
-    if (travelType === 'international') {
-      initialItems = [...internationalTemplate];
-    } else {
-      initialItems = [...domesticTemplate];
-    }
-
-    // AI生成データがある場合は追加
-    if (packingData && packingData.length > 0) {
-      const aiItems: PackingItem[] = packingData.map((item, index) => ({
-        id: `ai-${index}`,
-        name: item.name,
-        category: item.category,
-        quantity: item.quantity || 1,
-        isPacked: false,
-        isEssential: item.isEssential || false
-      }));
-      
-      // テンプレートとAIデータを統合（重複を避ける）
-      const existingNames = initialItems.map(item => item.name);
-      const newItems = aiItems.filter(item => !existingNames.includes(item.name));
-      initialItems = [...initialItems, ...newItems];
-    }
-
-    setItems(initialItems);
-  }, [packingData, travelType]);
-
-  // 進捗計算
-  const packedCount = items.filter(item => item.isPacked).length;
-  const totalCount = items.length;
-  const essentialUnpacked = items.filter(item => item.isEssential && !item.isPacked);
-
-  /**
-   * パッキング状態切り替え
-   */
-  const togglePacked = (id: string) => {
-    setItems(items.map(item => 
-      item.id === id ? { ...item, isPacked: !item.isPacked } : item
-    ));
+  // Supabaseから持ち物リストを取得
+  const fetchPackingItems = async () => {
+    if (!travelId) return;
+    const data = await packingApi.getPackingItems(travelId, userId);
+    setItems(data);
   };
 
-  /**
-   * アイテム追加
-   */
+  // 初期ロード・DBにデータがなければテンプレートをinsert
+  useEffect(() => {
+    if (!travelId || !userId || initializedRef.current) return;
+    initializedRef.current = true;
+    (async () => {
+      let items = await packingApi.getPackingItems(travelId, userId);
+      if (items.length === 0) {
+        await packingApi.createPackingItem({
+          travel_id: travelId,
+          user_id: userId,
+          name: 'パスポート',
+          category: '必需品',
+          quantity: 1,
+          is_packed: false,
+          is_essential: true,
+        });
+        items = await packingApi.getPackingItems(travelId, userId);
+      }
+      setItems(items);
+    })();
+    // eslint-disable-next-line
+  }, [travelId, userId, travelType, JSON.stringify(packingData)]);
+
+  // パッキング状態切り替え
+  const togglePacked = async (id: string) => {
+    const item = items.find(i => i.id === id);
+    if (!item) return;
+    await packingApi.updatePackingItem(id, { is_packed: !item.is_packed });
+    await fetchPackingItems();
+  };
+
+  // アイテム追加
   const handleAddItem = () => {
     setShowAddItemModal(true);
   };
 
-  /**
-   * アイテム編集
-   */
-  const handleEditItem = (item: PackingItem) => {
+  // アイテム編集
+  const handleEditItem = (item: PackingItemDB) => {
     setEditingItem(item);
     setShowEditItemModal(true);
   };
 
-  /**
-   * アイテム削除
-   */
+  // アイテム削除
   const handleDeleteClick = (itemId: string) => {
     setDeletingItemId(itemId);
     setShowDeleteConfirm(true);
   };
 
-  /**
-   * 削除確認
-   */
-  const confirmDelete = () => {
+  // アイテム削除
+  const confirmDelete = async () => {
     if (deletingItemId) {
-      setItems(items.filter(item => item.id !== deletingItemId));
+      await packingApi.deletePackingItem(deletingItemId);
       setShowDeleteConfirm(false);
       setDeletingItemId(null);
+      await fetchPackingItems();
     }
   };
 
-  /**
-   * 新しいアイテムを保存
-   */
-  const saveNewItem = (item: PackingItem) => {
-    setItems([...items, item]);
+  // アイテム追加
+  const saveNewItem = async (item: PackingItemDB) => {
+    await packingApi.createPackingItem({
+      travel_id: travelId,
+      name: item.name,
+      category: item.category,
+      quantity: item.quantity,
+      is_packed: item.is_packed,
+      is_essential: item.is_essential
+    });
     setShowAddItemModal(false);
+    await fetchPackingItems();
   };
 
-  /**
-   * 編集したアイテムを保存
-   */
-  const saveEditedItem = (item: PackingItem) => {
-    setItems(items.map(i => i.id === item.id ? item : i));
+  // アイテム編集
+  const saveEditedItem = async (item: PackingItemDB) => {
+    await packingApi.updatePackingItem(item.id!, {
+      name: item.name,
+      category: item.category,
+      quantity: item.quantity,
+      is_essential: item.is_essential,
+      is_packed: item.is_packed
+    });
     setShowEditItemModal(false);
     setEditingItem(null);
+    await fetchPackingItems();
   };
 
-  /**
-   * カテゴリ追加
-   */
+  // カテゴリ追加・削除はローカルのみ
   const addCategory = () => {
     if (newCategory.trim() && !categories.includes(newCategory.trim())) {
       setCategories([...categories, newCategory.trim()]);
@@ -232,27 +226,21 @@ const PackingTab: React.FC<PackingTabProps> = ({ packingData, travelType = 'dome
       setShowAddCategoryModal(false);
     }
   };
-
-  /**
-   * カテゴリ削除
-   */
   const deleteCategory = (category: string) => {
     if (category !== 'その他') {
       setCategories(categories.filter(cat => cat !== category));
-      // このカテゴリのアイテムを「その他」に変更
-      setItems(items.map(item => 
-        item.category === category ? { ...item, category: 'その他' } : item
-      ));
+      // DB上のカテゴリ変更は個別編集で対応
     }
   };
-
-  /**
-   * 削除対象のアイテム名を取得
-   */
   const getDeletingItemName = () => {
     const item = items.find(i => i.id === deletingItemId);
     return item?.name || '';
   };
+
+  // 進捗計算
+  const packedCount = items.filter(item => item.is_packed).length;
+  const totalCount = items.length;
+  const essentialUnpacked = items.filter(item => item.is_essential && !item.is_packed);
 
   return (
     <div className="space-y-6">

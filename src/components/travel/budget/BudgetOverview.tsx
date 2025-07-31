@@ -1,5 +1,6 @@
-import React from 'react';
-import { CreditCard, TrendingUp, TrendingDown } from 'lucide-react';
+import React, { useState } from 'react';
+import { CreditCard, TrendingUp, TrendingDown, Pencil } from 'lucide-react';
+import Modal from '../../common/Modal';
 
 /**
  * 予算概要コンポーネントのプロパティ
@@ -30,6 +31,8 @@ interface BudgetOverviewProps {
   remainingBudget: number;
   expenses: Expense[];
   categoryBudgets: CategoryBudget[];
+  travelId: string;
+  onBudgetUpdate: (newBudget: number) => void;
 }
 
 /**
@@ -42,6 +45,8 @@ const BudgetOverview: React.FC<BudgetOverviewProps> = ({
   remainingBudget,
   expenses = [],
   categoryBudgets = [],
+  travelId,
+  onBudgetUpdate,
 }) => {
   // カテゴリごとの実支出額を集計
   const actuals: Record<string, number> = {};
@@ -51,11 +56,35 @@ const BudgetOverview: React.FC<BudgetOverviewProps> = ({
     }
   });
 
+  const [isEditModalOpen, setEditModalOpen] = useState(false);
+  const [editValue, setEditValue] = useState(totalBudget);
+
+  const handleEditClick = () => {
+    setEditValue(totalBudget);
+    setEditModalOpen(true);
+  };
+  const handleEditSave = async () => {
+    // 予算をAPIで更新
+    try {
+      const { travelApi } = await import('../../../services/travelApi');
+      await travelApi.updateTravel(travelId, { budget: editValue });
+      onBudgetUpdate(editValue);
+      setEditModalOpen(false);
+    } catch (e) {
+      alert('予算の保存に失敗しました');
+    }
+  };
+
   return (
     <>
       {/* 全体予算・支出バー */}
       <div className="mb-8 bg-white p-6 rounded-lg shadow-sm border border-gray-200 dark:bg-gray-800 dark:border-gray-700">
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">全体の予算と支出</h3>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">全体の予算と支出</h3>
+          <button className="p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700" aria-label="編集" onClick={handleEditClick}>
+            <Pencil className="w-5 h-5 text-gray-500" />
+          </button>
+        </div>
         <div className="space-y-4">
           {/* 総予算バー */}
           <div>
@@ -78,7 +107,7 @@ const BudgetOverview: React.FC<BudgetOverviewProps> = ({
               )}
               {/* 予算の線（80%地点、バーの上に重ねて目立つ色） */}
               <div
-                className="absolute top-0 bottom-0 w-1 bg-yellow-400 z-10 rounded"
+                className="absolute top-0 bottom-0 w-1 h-full bg-yellow-500 -z-10 rounded"
                 style={{ left: 'calc(80% - 2px)' }}
               />
             </div>
@@ -137,35 +166,39 @@ const BudgetOverview: React.FC<BudgetOverviewProps> = ({
 
       {/* カテゴリ別予算バー */}
       <div className="mt-8 bg-white p-6 rounded-lg shadow-sm border border-gray-200 dark:bg-gray-800 dark:border-gray-700">
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">AI推測カテゴリ別予算</h3>
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">カテゴリ別予算</h3>
         <div className="space-y-4">
           {categoryBudgets.map(({ category, amount }) => {
             const actual = actuals[category] || 0;
-            const percent = Math.min((actual / amount), 1) * 80; // 予算内は最大80%
+            const percent = amount > 0 ? Math.min((actual / amount), 1) * 100 : 0;
             const isOver = actual > amount;
-            const overPercent = isOver ? Math.min(((actual - amount) / amount) * 80, 20) : 0;
+            const isWarning = !isOver && percent >= 80;
+            const overPercent = isOver && amount > 0 ? Math.min(((actual - amount) / amount) * 100, 100) : 0;
+            let barColor = 'bg-blue-500';
+            if (isWarning) barColor = 'bg-yellow-400';
+            if (isOver) barColor = 'bg-red-500';
             return (
               <div key={category}>
                 <div className="flex justify-between items-center mb-1">
                   <span className="font-medium text-gray-700 dark:text-gray-300">{category}</span>
-                  <span className={`text-sm font-mono ${isOver ? 'text-red-600 dark:text-red-400' : 'text-gray-700 dark:text-gray-300'}`}>¥{actual.toLocaleString()} / ¥{amount.toLocaleString()}</span>
+                  <span className={`text-sm font-mono ${isOver ? 'text-red-600 dark:text-red-400' : isWarning ? 'text-yellow-600 dark:text-yellow-400' : 'text-gray-700 dark:text-gray-300'}`}>¥{actual.toLocaleString()} / ¥{amount.toLocaleString()}</span>
                 </div>
                 <div className="w-full h-4 bg-gray-100 rounded-full overflow-hidden relative">
-                  {isOver ? (
+                  {/* 80%地点の線（先に描画） */}
                     <div
-                      className="h-4 rounded-full transition-all duration-300 bg-red-500"
-                      style={{ width: `${80 + overPercent}%` }}
+                    className="absolute top-0 left-0 h-full"
+                    style={{
+                      left: 'calc(80% - 1px)',
+                      width: '2px',
+                      background: '#facc15', // Tailwind yellow-400
+                      height: '100%',
+                      zIndex: 0
+                    }}
                     />
-                  ) : (
+                  {/* 進捗バー（後に描画） */}
                     <div
-                      className="h-4 rounded-full transition-all duration-300 bg-blue-500"
-                      style={{ width: `${percent}%` }}
-                    />
-                  )}
-                  {/* 予算の線（80%地点、バーの上に重ねて目立つ色） */}
-                  <div
-                    className="absolute top-0 bottom-0 w-1 bg-yellow-400 z-20 rounded"
-                    style={{ left: 'calc(80% - 2px)' }}
+                    className={`h-4 rounded-full transition-all duration-300 ${barColor} relative`}
+                    style={{ width: `${isOver ? 100 + overPercent : percent}%`, zIndex: 1 }}
                   />
                 </div>
                 {isOver && (
@@ -176,6 +209,25 @@ const BudgetOverview: React.FC<BudgetOverviewProps> = ({
           })}
         </div>
       </div>
+
+      {/* 予算編集モーダル */}
+      <Modal isOpen={isEditModalOpen} onClose={() => setEditModalOpen(false)} title="予算を編集">
+        <div className="space-y-4">
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-200">新しい予算金額</label>
+          <input
+            type="number"
+            className="w-full border rounded px-3 py-2 text-lg"
+            value={editValue}
+            min={0}
+            onChange={e => setEditValue(Number(e.target.value))}
+            placeholder="例: 50000"
+          />
+          <button
+            className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700"
+            onClick={handleEditSave}
+          >保存</button>
+        </div>
+      </Modal>
     </>
   );
 };

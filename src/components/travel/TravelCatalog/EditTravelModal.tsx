@@ -42,7 +42,7 @@ const EditTravelModal: React.FC<EditTravelModalProps> = ({
         destination: travel.destination,
         description: travel.description,
         budget: travel.budget,
-        memberCount: travel.memberCount,
+        memberCount: travel.memberCount ?? travel.member_count,
         startDate: travel.startDate,
         endDate: travel.endDate,
         status: travel.status || 'planning',
@@ -68,6 +68,7 @@ const EditTravelModal: React.FC<EditTravelModalProps> = ({
       const updatedTravel: Travel = {
         ...travel,
         ...editData,
+        member_count: editData.memberCount, // memberCountをmember_countとして保存
         updatedAt: new Date().toISOString().split('T')[0],
         status: editData.status || 'planning',
       };

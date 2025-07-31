@@ -16,7 +16,8 @@ interface Member {
  */
 interface Room {
   id: string;
-  name: string;
+  room_number: string;
+  room_name: string;
   type: string;
   capacity: number;
   pricePerNight: number;
@@ -60,7 +61,7 @@ const MemberCard: React.FC<MemberCardProps> = ({
   const getAvailableRooms = () => {
     return rooms.filter(room => {
       if (!room.isAvailable) return false;
-      const currentMembers = currentAssignments[room.id] || [];
+      const currentMembers = currentAssignments[room.room_number] || [];
       return currentMembers.length < room.capacity;
     });
   };
@@ -68,8 +69,8 @@ const MemberCard: React.FC<MemberCardProps> = ({
   /**
    * 部屋に割り当て
    */
-  const handleAssignToRoom = (roomId: string) => {
-    onAssign(member.id, roomId);
+  const handleAssignToRoom = (roomNumber: string) => {
+    onAssign(member.id, roomNumber);
     setShowRoomSelect(false);
   };
 
@@ -146,29 +147,27 @@ const MemberCard: React.FC<MemberCardProps> = ({
                   <div className="text-xs text-gray-500 mb-2 px-2 dark:text-gray-400">利用可能な部屋</div>
                   <div className="space-y-1 max-h-48 overflow-y-auto">
                     {availableRooms.map((room) => {
-                      const currentMembers = currentAssignments[room.id] || [];
+                      const currentMembers = currentAssignments[room.room_number] || [];
                       const remainingCapacity = room.capacity - currentMembers.length;
                       
                       return (
                         <button
-                          key={room.id}
-                          onClick={() => handleAssignToRoom(room.id)}
+                          key={room.room_number}
+                          onClick={() => handleAssignToRoom(room.room_number)}
                           className="w-full text-left p-2 hover:bg-blue-50 rounded-md transition-colors dark:hover:bg-blue-900"
                         >
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                              <div className="flex items-center justify-center w-6 h-6 bg-blue-100 text-blue-600 rounded-full text-xs font-semibold dark:bg-blue-900 dark:text-blue-300">
-                                {room.id}
-                              </div>
-                              <div>
-                                <div className="text-sm font-medium text-gray-900 dark:text-gray-100">{room.name}</div>
-                                <div className="text-xs text-gray-600 dark:text-gray-400">{room.type}</div>
-                              </div>
+                          <div className="flex items-center gap-2">
+                            <div className="flex items-center justify-center w-6 h-6 bg-blue-100 text-blue-600 rounded-full text-xs font-semibold dark:bg-blue-900 dark:text-blue-300">
+                              {room.room_number}
                             </div>
-                            <div className="text-right">
-                              <div className="text-sm font-medium text-gray-900 dark:text-gray-100">¥{room.pricePerNight.toLocaleString()}</div>
-                              <div className="text-xs text-gray-600 dark:text-gray-400">{remainingCapacity}人空き</div>
+                            <div>
+                              <div className="text-sm font-medium text-gray-900 dark:text-gray-100">{room.room_name}</div>
+                              <div className="text-xs text-gray-600 dark:text-gray-400">{room.type}</div>
                             </div>
+                          </div>
+                          <div className="text-right">
+                            <div className="text-sm font-medium text-gray-900 dark:text-gray-100">¥{room.pricePerNight.toLocaleString()}</div>
+                            <div className="text-xs text-gray-600 dark:text-gray-400">{remainingCapacity}人空き</div>
                           </div>
                         </button>
                       );

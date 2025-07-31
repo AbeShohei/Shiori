@@ -9,8 +9,8 @@ interface PackingItem {
   name: string;
   category: string;
   quantity: number;
-  isPacked: boolean;
-  isEssential: boolean;
+  is_packed: boolean;
+  is_essential: boolean;
 }
 
 /**
@@ -69,7 +69,7 @@ const PackingItemComponent: React.FC<PackingItemProps> = ({
 
   return (
     <div className={`bg-white p-4 rounded-lg border transition-all duration-200 dark:bg-gray-800 dark:border-gray-700 ${
-      item.isPacked 
+      item.is_packed 
         ? 'border-green-200 bg-green-50 dark:border-green-700 dark:bg-green-900' 
         : 'border-gray-200 hover:border-gray-300 dark:border-gray-700 dark:hover:border-gray-600'
     }`}>
@@ -80,23 +80,23 @@ const PackingItemComponent: React.FC<PackingItemProps> = ({
           <button
             onClick={() => onTogglePacked(item.id)}
             className={`flex-shrink-0 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors ${
-              item.isPacked
+              item.is_packed
                 ? 'bg-green-500 border-green-500 text-white'
                 : 'border-gray-300 hover:border-green-400'
             }`}
-            aria-label={item.isPacked ? 'パッキング済み' : '未パッキング'}
+            aria-label={item.is_packed ? 'パッキング済み' : '未パッキング'}
           >
-            {item.isPacked && <Check className="h-3 w-3" />}
+            {item.is_packed && <Check className="h-3 w-3" />}
           </button>
           
           {/* アイテム詳細 */}
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 mb-1">
               <span className="text-lg">{getCategoryIcon(item.category)}</span>
-              <h3 className={`font-medium truncate ${item.isPacked ? 'line-through text-gray-500 dark:text-gray-400' : 'text-gray-900 dark:text-gray-100'}`}>
+              <h3 className={`font-medium truncate ${item.is_packed ? 'line-through text-gray-500 dark:text-gray-400' : 'text-gray-900 dark:text-gray-100'}`}>
                 {item.name}
               </h3>
-              {item.isEssential && (
+              {item.is_essential && (
                 <span className="px-2 py-0.5 bg-red-100 text-red-700 text-xs rounded-full font-medium dark:bg-red-900 dark:text-red-300">
                   必須
                 </span>

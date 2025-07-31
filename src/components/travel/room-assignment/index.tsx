@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Users, Bed, Plus, Shuffle, Calendar, ChevronLeft, ChevronRight, RotateCcw } from 'lucide-react';
+import { Users, Bed, Plus, Shuffle, Calendar, ChevronLeft, ChevronRight, RotateCcw, ChevronDown, ChevronLeft as ChevronLeftIcon, ChevronRight as ChevronRightIcon, Layers, UserPlus } from 'lucide-react';
+import { Menu, Transition } from '@headlessui/react';
 import MemberCard from './MemberCard';
 import RoomCard from './RoomCard';
 import MemberForm from './MemberForm';
@@ -9,6 +10,8 @@ import DeleteRoomModal from './DeleteRoomModal';
 import Modal from '../../common/Modal';
 import Button from '../../common/Button';
 import Input from '../../common/Input';
+import { roomAssignmentApi } from '../../../services/travelApi';
+import { memberApi, Member } from '../../../services/memberApi';
 
 /**
  * メンバーの型定義
@@ -24,13 +27,17 @@ interface Member {
  * 部屋の型定義
  */
 interface Room {
-  id: string;
+  id?: string; // 部屋ID
+  room_number: string;
   name: string;
   type: string;
   capacity: number;
   pricePerNight: number;
   amenities: string[];
   isAvailable: boolean;
+  stay_dates?: string[]; // 部屋が泊まれる日付の配列
+  check_in?: string; // チェックイン日
+  check_out?: string; // チェックアウト日
 }
 
 /**
@@ -46,6 +53,8 @@ interface TravelInfo {
   startDate: string;
   endDate: string;
   destination: string;
+  memberCount?: number; // グループ人数を追加
+  id?: string; // 旅行ID
 }
 
 interface RoomAssignmentTabProps {
@@ -58,97 +67,13 @@ interface RoomAssignmentTabProps {
  */
 const RoomAssignmentTab: React.FC<RoomAssignmentTabProps> = ({ travelInfo }) => {
   // メンバーデータの状態
-  const [members, setMembers] = useState<Member[]>([
-    {
-      id: '1',
-      name: '田中太郎',
-      gender: 'male',
-      preferences: ['静か', '禁煙']
-    },
-    {
-      id: '2',
-      name: '佐藤花子',
-      gender: 'female',
-      preferences: ['景色重視', '禁煙']
-    },
-    {
-      id: '3',
-      name: '山田次郎',
-      gender: 'male',
-      preferences: ['コスト重視']
-    },
-    {
-      id: '4',
-      name: '鈴木美咲',
-      gender: 'female',
-      preferences: ['景色重視', '静か']
-    },
-    {
-      id: '5',
-      name: '高橋健太',
-      gender: 'male',
-      preferences: ['アクセス重視']
-    }
-  ]);
+  const [members, setMembers] = useState<Member[]>([]);
 
   // 部屋データの状態
-  const [rooms, setRooms] = useState<Room[]>([
-    {
-      id: '101',
-      name: 'オーシャンビュー ツイン',
-      type: 'ツインルーム',
-      capacity: 2,
-      pricePerNight: 12000,
-      amenities: ['オーシャンビュー', 'バルコニー', '禁煙', 'Wi-Fi'],
-      isAvailable: true
-    },
-    {
-      id: '102',
-      name: 'シティビュー ツイン',
-      type: 'ツインルーム',
-      capacity: 2,
-      pricePerNight: 8000,
-      amenities: ['シティビュー', '禁煙', 'Wi-Fi'],
-      isAvailable: true
-    },
-    {
-      id: '201',
-      name: 'デラックス トリプル',
-      type: 'トリプルルーム',
-      capacity: 3,
-      pricePerNight: 15000,
-      amenities: ['オーシャンビュー', 'バルコニー', '禁煙', 'Wi-Fi', 'ミニバー'],
-      isAvailable: true
-    }
-  ]);
+  const [rooms, setRooms] = useState<Room[]>([]);
 
   // 日別割り当ての状態
-  const [dayAssignments, setDayAssignments] = useState<DayAssignment[]>([
-    {
-      date: '2024/3/15',
-      day: '1日目',
-      roomAssignments: {
-        '101': ['1', '3'],
-        '102': ['2', '4']
-      }
-    },
-    {
-      date: '2024/3/16',
-      day: '2日目',
-      roomAssignments: {
-        '101': ['1', '3'],
-        '102': ['2', '4']
-      }
-    },
-    {
-      date: '2024/3/17',
-      day: '3日目',
-      roomAssignments: {
-        '201': ['1', '2', '5'],
-        '102': ['3', '4']
-      }
-    }
-  ]);
+  const [dayAssignments, setDayAssignments] = useState<DayAssignment[]>([]);
 
   // UI状態
   const [currentDayIndex, setCurrentDayIndex] = useState(0);
@@ -167,14 +92,56 @@ const RoomAssignmentTab: React.FC<RoomAssignmentTabProps> = ({ travelInfo }) => 
   const [newTagInput, setNewTagInput] = useState('');
   const [showTagInput, setShowTagInput] = useState(false);
 
-  // 日付範囲から日数分のDayAssignmentを自動生成
+  // メンバー名のサンプル配列
+  const sampleNames = [
+    '田中太郎', '佐藤花子', '山田次郎', '鈴木美咲', '高橋健太',
+    '伊藤雅子', '渡辺雄一', '中村恵子', '小林正男', '加藤美香',
+    '吉田健二', '山口智子', '松本大輔', '井上由美', '木村和也',
+    '林美穂', '斎藤隆', '清水恵美', '森田一郎', '池田真由美'
+  ];
+
+  // 旅行情報からメンバーを自動生成
+  const generateMembersFromTravelInfo = (memberCount: number): Member[] => {
+    const generatedMembers: Member[] = [];
+    
+    for (let i = 0; i < memberCount; i++) {
+      // 性別をランダムに決定
+      const gender: 'male' | 'female' = Math.random() > 0.5 ? 'male' : 'female';
+      
+      // 希望条件をランダムに選択（1-3個）
+      const preferenceCount = Math.floor(Math.random() * 3) + 1;
+      const shuffledPreferences = [...availableTags].sort(() => 0.5 - Math.random());
+      const preferences = shuffledPreferences.slice(0, preferenceCount);
+      
+      generatedMembers.push({
+        id: `member-${i + 1}`,
+        name: `メンバー${i + 1}`,
+        gender,
+        preferences
+      });
+    }
+    
+    return generatedMembers;
+  };
+
+  // 旅行情報が変更された時にメンバーと日付を自動生成
   useEffect(() => {
+    console.log('RoomAssignmentTab: travelInfo received:', travelInfo);
+    
     if (travelInfo && travelInfo.startDate && travelInfo.endDate) {
+      // メンバーの自動生成
+      const memberCount = travelInfo.memberCount || 4; // デフォルト4名
+      console.log('RoomAssignmentTab: Generating members for count:', memberCount);
+      const generatedMembers = generateMembersFromTravelInfo(memberCount);
+      setMembers(generatedMembers);
+      
+      // 日付の自動生成
       const start = new Date(travelInfo.startDate);
       const end = new Date(travelInfo.endDate);
       
       // 宿泊日数を計算（終了日は含まない）
       const nights = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+      console.log('RoomAssignmentTab: Generating dates for nights:', nights);
       
       // 日数が0以下の場合は処理しない
       if (nights <= 0) {
@@ -197,25 +164,62 @@ const RoomAssignmentTab: React.FC<RoomAssignmentTabProps> = ({ travelInfo }) => 
         const dayOfWeek = current.toLocaleDateString('ja-JP', { weekday: 'short' });
         const fullDateStr = `${dateStr} (${dayOfWeek})`;
         
-        // 連泊の場合は前日の割り当てをコピー
-        let roomAssignments = {};
-        if (dayCount > 1 && days.length > 0) {
-          roomAssignments = { ...days[days.length - 1].roomAssignments };
-        }
-        
         days.push({
           date: fullDateStr,
           day: `${dayCount}日目`,
-          roomAssignments
+          roomAssignments: {}
         });
         
+        // 次の日付に移動
         current.setDate(current.getDate() + 1);
       }
       
       setDayAssignments(days);
       setCurrentDayIndex(0);
+      console.log('RoomAssignmentTab: Generated days:', days);
     }
   }, [travelInfo]);
+
+  // 部屋データをSupabaseから取得
+  useEffect(() => {
+    if (travelInfo?.id) {
+      roomAssignmentApi.getRoomAssignments(travelInfo.id).then((data) => {
+        setRooms(data.map((r: any) => ({
+          id: r.id,
+          room_number: r.room_number,
+          name: r.room_name, // ←ここで必ずnameにマッピング
+          type: r.type,
+          capacity: r.capacity,
+          pricePerNight: r.pricePerNight,
+          amenities: r.amenities,
+          isAvailable: r.isAvailable !== false, // undefinedならtrue
+          stay_dates: r.stay_dates, // stay_datesを追加
+          check_in: r.check_in,
+          check_out: r.check_out,
+        })));
+      });
+    }
+  }, [travelInfo?.id]);
+
+  // メンバー一覧取得
+  useEffect(() => {
+    if (travelInfo?.id) {
+      memberApi.getMembers(travelInfo.id).then(async (members) => {
+        setMembers(members);
+        // 初回のみテンプレートメンバーを自動生成
+        if (members.length === 0 && travelInfo.memberCount) {
+          const templateMembers = Array.from({ length: travelInfo.memberCount }).map((_, i) => ({
+            name: `メンバー${i + 1}`,
+            gender: Math.random() > 0.5 ? 'male' : 'female',
+            preferences: [],
+            travel_id: travelInfo.id,
+          }));
+          const created = await Promise.all(templateMembers.map(m => memberApi.createMember(m)));
+          setMembers(created);
+        }
+      });
+    }
+  }, [travelInfo?.id, travelInfo?.memberCount]);
 
   // 宿泊日数を取得
   const getStayNights = () => {
@@ -267,6 +271,16 @@ const RoomAssignmentTab: React.FC<RoomAssignmentTabProps> = ({ travelInfo }) => 
   // 現在の日と割り当てを取得
   const currentDay = dayAssignments[currentDayIndex];
   const currentAssignments = currentDay?.roomAssignments || {};
+  const currentDateStr = currentDay?.date?.split(' ')[0]?.replace(/\(|\)/g, '').replaceAll('/', '-'); // 例: "2025-07-20"
+
+  // 部屋ごとにcheck_in, check_outでその日泊まる部屋だけを抽出（Date型で厳密比較）
+  const roomsForCurrentDay = rooms.filter(room => {
+    if (!room.check_in || !room.check_out || !currentDateStr) return false;
+    const checkIn = new Date(room.check_in);
+    const checkOut = new Date(room.check_out);
+    const current = new Date(currentDateStr);
+    return checkIn <= current && current < checkOut;
+  });
 
   /**
    * 未割り当てメンバーを取得
@@ -281,7 +295,7 @@ const RoomAssignmentTab: React.FC<RoomAssignmentTabProps> = ({ travelInfo }) => 
    */
   const getTotalCostForDay = () => {
     return Object.keys(currentAssignments).reduce((total, roomId) => {
-      const room = rooms.find(r => r.id === roomId);
+      const room = rooms.find(r => r.room_number === roomId);
       return total + (room?.pricePerNight || 0);
     }, 0);
   };
@@ -297,43 +311,49 @@ const RoomAssignmentTab: React.FC<RoomAssignmentTabProps> = ({ travelInfo }) => 
   /**
    * メンバーを部屋に割り当て
    */
-  const assignMemberToRoom = (memberId: string, roomId: string) => {
-    const room = rooms.find(r => r.id === roomId);
-    const currentRoomMembers = currentAssignments[roomId] || [];
-    
+  const assignMemberToRoom = async (memberId: string, roomNumber: string) => {
+    const room = rooms.find(r => r.room_number === roomNumber);
+    const currentRoomMembers = currentAssignments[roomNumber] || [];
     if (room && currentRoomMembers.length < room.capacity) {
       // 他の部屋からメンバーを削除
       const newAssignments = { ...currentAssignments };
       Object.keys(newAssignments).forEach(rId => {
-        newAssignments[rId] = newAssignments[rId].filter(id => id !== memberId);
+        newAssignments[rId] = (newAssignments[rId] || []).filter(id => id !== memberId);
       });
-      
       // 新しい部屋に追加
-      newAssignments[roomId] = [...(newAssignments[roomId] || []), memberId];
-      
+      newAssignments[roomNumber] = [...(newAssignments[roomNumber] || []), memberId];
       // 日別割り当てを更新
-      const updatedDayAssignments = dayAssignments.map((day, index) => 
-        index === currentDayIndex 
+      const updatedDayAssignments = dayAssignments.map((day, index) =>
+        index === currentDayIndex
           ? { ...day, roomAssignments: newAssignments }
           : day
       );
       setDayAssignments(updatedDayAssignments);
+      // DBにも反映
+      if (room.id) {
+        await roomAssignmentApi.updateRoomAssignment(room.id, { members: newAssignments[roomNumber] });
+      }
     }
   };
 
   /**
    * 部屋からメンバーを削除
    */
-  const removeMemberFromRoom = (memberId: string, roomId: string) => {
-    const newAssignments = { ...currentAssignments };
-    newAssignments[roomId] = newAssignments[roomId].filter(id => id !== memberId);
-    
-    const updatedDayAssignments = dayAssignments.map((day, index) => 
-      index === currentDayIndex 
+  const removeMemberFromRoom = async (memberId: string, roomNumber: string) => {
+    const current = currentAssignments[roomNumber] || [];
+    const newMembers = current.filter(id => id !== memberId);
+    const newAssignments = { ...currentAssignments, [roomNumber]: newMembers };
+    const updatedDayAssignments = dayAssignments.map((day, index) =>
+      index === currentDayIndex
         ? { ...day, roomAssignments: newAssignments }
         : day
     );
     setDayAssignments(updatedDayAssignments);
+    // DBにも反映
+    const room = rooms.find(r => r.room_number === roomNumber);
+    if (room && room.id) {
+      await roomAssignmentApi.updateRoomAssignment(room.id, { members: newMembers });
+    }
   };
 
   /**
@@ -364,29 +384,29 @@ const RoomAssignmentTab: React.FC<RoomAssignmentTabProps> = ({ travelInfo }) => 
    * 全期間の自動割り当て（連泊対応）
    */
   const autoAssignAllDays = () => {
+    // 1日目の割り当てを生成
     const unassignedMembers = getUnassignedMembers();
     const availableRooms = rooms.filter(room => room.isAvailable);
-    
     if (unassignedMembers.length === 0 || availableRooms.length === 0) return;
-    
-    // 1日目の自動割り当て
-    autoAssignRooms();
-    
-    // 連泊の場合は2日目以降も同じ割り当てをコピー
-    if (getConsecutiveStayInfo()?.isConsecutive && dayAssignments.length > 1) {
-      // 少し遅延を入れて1日目の割り当てが完了してからコピー
-      setTimeout(() => {
-        const firstDayAssignments = dayAssignments[0].roomAssignments;
-        
-        const updatedDayAssignments = dayAssignments.map((day, index) => 
-          index === 0 
-            ? day // 1日目はそのまま
-            : { ...day, roomAssignments: { ...firstDayAssignments } }
-        );
-        
-        setDayAssignments(updatedDayAssignments);
-      }, 200);
+
+    // 1日目の割り当てロジック
+    let newAssignments: { [roomId: string]: string[] } = {};
+    let memberIndex = 0;
+    for (const room of availableRooms) {
+      const remainingCapacity = room.capacity;
+      newAssignments[room.room_number] = [];
+      for (let i = 0; i < remainingCapacity && memberIndex < unassignedMembers.length; i++) {
+        newAssignments[room.room_number].push(unassignedMembers[memberIndex].id);
+        memberIndex++;
+      }
     }
+
+    // 全日分にコピー
+    const updatedDayAssignments = dayAssignments.map((day) => ({
+      ...day,
+      roomAssignments: { ...newAssignments }
+    }));
+    setDayAssignments(updatedDayAssignments);
   };
 
   /**
@@ -401,11 +421,11 @@ const RoomAssignmentTab: React.FC<RoomAssignmentTabProps> = ({ travelInfo }) => 
     
     // 各部屋に順番に割り当て
     for (const room of availableRooms) {
-      const currentRoomMembers = newAssignments[room.id] || [];
+      const currentRoomMembers = newAssignments[room.room_number] || [];
       const remainingCapacity = room.capacity - currentRoomMembers.length;
       
       for (let i = 0; i < remainingCapacity && memberIndex < unassignedMembers.length; i++) {
-        newAssignments[room.id] = [...(newAssignments[room.id] || []), unassignedMembers[memberIndex].id];
+        newAssignments[room.room_number] = [...(newAssignments[room.room_number] || []), unassignedMembers[memberIndex].id];
         memberIndex++;
       }
     }
@@ -427,11 +447,10 @@ const RoomAssignmentTab: React.FC<RoomAssignmentTabProps> = ({ travelInfo }) => 
   /**
    * 新しいメンバーを追加
    */
-  const addMember = (member: Member | Member[]) => {
-    if (Array.isArray(member)) {
-      setMembers(prev => [...prev, ...member]);
-    } else {
-      setMembers(prev => [...prev, member]);
+  const addMember = async (member: Omit<Member, 'id' | 'created_at'>) => {
+    if (travelInfo?.id) {
+      const newMember = await memberApi.createMember({ ...member, travel_id: travelInfo.id });
+      setMembers(prev => [...prev, newMember]);
     }
     setShowAddMember(false);
   };
@@ -439,35 +458,111 @@ const RoomAssignmentTab: React.FC<RoomAssignmentTabProps> = ({ travelInfo }) => 
   /**
    * 新しい部屋を追加
    */
-  const addRoom = (room: Room) => {
-    setRooms([...rooms, room]);
+  const addRoom = async (room: Room) => {
+    if (travelInfo?.id) {
+      const { room_name, ...rest } = room;
+      await roomAssignmentApi.createRoomAssignment({ ...rest, room_name, travel_id: travelInfo.id, check_in: room.check_in, check_out: room.check_out });
+      const data = await roomAssignmentApi.getRoomAssignments(travelInfo.id);
+      setRooms(data.map((r: any) => ({
+        id: r.id,
+        room_number: r.room_number,
+        name: r.room_name,
+        type: r.type,
+        capacity: r.capacity,
+        pricePerNight: r.pricePerNight,
+        amenities: r.amenities,
+        isAvailable: r.isAvailable !== false, // undefinedならtrue
+        stay_dates: r.stay_dates, // stay_datesを追加
+        check_in: r.check_in,
+        check_out: r.check_out,
+      })));
+    }
     setShowAddRoom(false);
   };
 
   /**
    * 複数の部屋を一括追加
    */
-  const addBulkRooms = (newRooms: Room[]) => {
-    setRooms([...rooms, ...newRooms]);
+  const addBulkRooms = async (newRooms: Room[]) => {
+    if (travelInfo?.id) {
+      for (const room of newRooms) {
+        const { room_name, ...rest } = room;
+        await roomAssignmentApi.createRoomAssignment({ ...rest, room_name, travel_id: travelInfo.id });
+      }
+      const data = await roomAssignmentApi.getRoomAssignments(travelInfo.id);
+      setRooms(data.map((r: any) => ({
+        id: r.id,
+        room_number: r.room_number,
+        name: r.room_name,
+        type: r.type,
+        capacity: r.capacity,
+        pricePerNight: r.pricePerNight,
+        amenities: r.amenities,
+        isAvailable: r.isAvailable !== false, // undefinedならtrue
+        stay_dates: r.stay_dates, // stay_datesを追加
+      })));
+    }
     setShowBulkAddRoom(false);
   };
 
   /**
    * 部屋を編集
    */
-  const editRoom = (room: Room) => {
-    setRooms(rooms.map(r => r.id === room.id ? room : r));
+  const editRoom = async (room: any) => {
+    const roomId = room.id || room['id'];
+    if (roomId) {
+      await roomAssignmentApi.updateRoomAssignment(roomId, {
+        room_number: room.room_number,
+        room_name: room.room_name || room.name,
+        type: room.type,
+        capacity: room.capacity,
+        pricePerNight: room.pricePerNight,
+        amenities: room.amenities,
+        isavailable: room.isavailable !== undefined ? room.isavailable : room.isAvailable,
+        stay_dates: room.stay_dates,
+        check_in: room.check_in,
+        check_out: room.check_out,
+      });
+      if (travelInfo?.id) {
+        const data = await roomAssignmentApi.getRoomAssignments(travelInfo.id);
+        setRooms(data.map((r: any) => ({
+          id: r.id,
+          room_number: r.room_number,
+          name: r.room_name,
+          type: r.type,
+          capacity: r.capacity,
+          pricePerNight: r.pricePerNight,
+          amenities: r.amenities,
+          isAvailable: r.isAvailable !== false,
+          stay_dates: r.stay_dates,
+          check_in: r.check_in,
+          check_out: r.check_out,
+        })));
+      }
+    }
     setEditingRoom(null);
   };
 
   /**
    * 部屋を削除
    */
-  const deleteRoom = (roomId: string) => {
-    // 部屋を削除
-    setRooms(rooms.filter(r => r.id !== roomId));
-    
-    // 全ての日別割り当てから該当部屋を削除し、割り当てられたメンバーを未割り当てにする
+  const deleteRoom = async (roomId: string) => {
+    await roomAssignmentApi.deleteRoomAssignment(roomId);
+    if (travelInfo?.id) {
+      const data = await roomAssignmentApi.getRoomAssignments(travelInfo.id);
+      setRooms(data.map((r: any) => ({
+        id: r.id,
+        room_number: r.room_number,
+        name: r.room_name,
+        type: r.type,
+        capacity: r.capacity,
+        pricePerNight: r.pricePerNight,
+        amenities: r.amenities,
+        isAvailable: r.isAvailable !== false, // undefinedならtrue
+        stay_dates: r.stay_dates, // stay_datesを追加
+      })));
+    }
+    // 日別割り当てからも削除（既存ロジック）
     const updatedDayAssignments = dayAssignments.map(day => {
       const newRoomAssignments = { ...day.roomAssignments };
       delete newRoomAssignments[roomId];
@@ -568,110 +663,85 @@ const RoomAssignmentTab: React.FC<RoomAssignmentTabProps> = ({ travelInfo }) => 
     }
   };
 
+  // メンバー編集
+  const editMember = async (id: string, updates: Partial<Member>) => {
+    const updated = await memberApi.updateMember(id, updates);
+    setMembers(prev => prev.map(m => m.id === id ? updated : m));
+  };
+
+  // メンバー削除
+  const deleteMember = async (id: string) => {
+    await memberApi.deleteMember(id);
+    setMembers(prev => prev.filter(m => m.id !== id));
+  };
+
   return (
     <div className="space-y-6">
-      {/* 日付ナビゲーション */}
-      <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 dark:bg-gray-800 dark:border-gray-700">
-        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-          <div className="flex items-center justify-center lg:justify-start gap-4">
-            <button
-              onClick={() => setCurrentDayIndex(Math.max(0, currentDayIndex - 1))}
-              disabled={currentDayIndex === 0}
-              className="p-2 text-gray-400 hover:text-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
-              aria-label="前の日付に移動"
-            >
+      {/* 日付・操作ボタンエリア */}
+      <div className="bg-white rounded-lg shadow-sm p-4 mb-6 flex flex-col gap-2">
+        {/* 1段目: 日付・旅程情報を中央寄せ（常に中央） */}
+        <div className="flex flex-col items-center gap-1">
+          <div className="flex items-center gap-2">
+            <button onClick={() => setCurrentDayIndex(Math.max(0, currentDayIndex - 1))} disabled={currentDayIndex === 0} className="p-1 rounded hover:bg-gray-100 disabled:opacity-40" title="前の日付に移動">
               <ChevronLeft className="h-5 w-5" />
             </button>
-            <div className="text-center">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">{currentDay?.day}</h3>
-              <p className="text-sm text-gray-600 dark:text-gray-400 font-medium">{currentDay?.date}</p>
-              {/* 宿泊日数と連泊情報 */}
-              {travelInfo && (
-                <div className="mt-1">
-                  <p className="text-xs text-gray-500 dark:text-gray-400">
-                    {getStayNights()}泊 / {dayAssignments.length}日目
-                  </p>
-                  {getConsecutiveStayInfo() && (
-                    <div className="text-xs">
-                      <p className="text-blue-600 dark:text-blue-400 font-medium">
-                        {getConsecutiveStayInfo()?.message}
-                      </p>
-                      <p className="text-gray-500 dark:text-gray-400">
-                        {travelInfo.startDate} 〜 {travelInfo.endDate}
-                      </p>
-                    </div>
-                  )}
-                  {getCurrentDateInfo() && (
-                    <p className="text-xs text-green-600 dark:text-green-400 font-medium">
-                      {getCurrentDateInfo()?.isFirstDay && '初日'}
-                      {getCurrentDateInfo()?.isLastDay && '最終日'}
-                      {!getCurrentDateInfo()?.isFirstDay && !getCurrentDateInfo()?.isLastDay && '連泊中'}
-                    </p>
-                  )}
-                </div>
-              )}
-            </div>
-            <button
-              onClick={() => setCurrentDayIndex(Math.min(dayAssignments.length - 1, currentDayIndex + 1))}
-              disabled={currentDayIndex === dayAssignments.length - 1}
-              className="p-2 text-gray-400 hover:text-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
-              aria-label="次の日付に移動"
-            >
+            <span className="text-lg font-semibold text-gray-900">{currentDay?.day}</span>
+            <button onClick={() => setCurrentDayIndex(Math.min(dayAssignments.length - 1, currentDayIndex + 1))} disabled={currentDayIndex === dayAssignments.length - 1} className="p-1 rounded hover:bg-gray-100 disabled:opacity-40" title="次の日付に移動">
               <ChevronRight className="h-5 w-5" />
             </button>
           </div>
-          
-          <div className="flex flex-wrap gap-2 justify-center lg:justify-end">
-            <Button
-              variant="secondary"
-              onClick={copyFromPreviousDay}
-              disabled={currentDayIndex === 0}
-              size="sm"
+          <span className="text-xs text-gray-500">{currentDay?.date}</span>
+          <span className="text-xs text-blue-600 font-medium">{getConsecutiveStayInfo()?.message}</span>
+          <span className="text-xs text-green-600 font-medium">{getCurrentDateInfo()?.isFirstDay && '初日'}{getCurrentDateInfo()?.isLastDay && '最終日'}</span>
+        </div>
+        {/* 2段目: ボタン群を現代的に横並び・wrap対応 */}
+        <div className="flex flex-wrap justify-center items-center gap-3 w-full mt-2">
+          <button onClick={autoAssignAllDays} className="flex items-center gap-2 px-5 py-2 min-w-[140px] bg-blue-600 text-white rounded-full shadow font-semibold hover:bg-blue-700 transition">
+            <Shuffle className="h-5 w-5" /> 全期間自動割り当て
+          </button>
+          <Menu as="div" className="relative">
+            <Menu.Button className="flex items-center gap-2 px-5 py-2 min-w-[120px] bg-gray-100 text-gray-700 rounded-full hover:bg-gray-200 transition font-semibold">
+              <Plus className="h-5 w-5" /> 追加 <ChevronDown className="h-4 w-4" />
+            </Menu.Button>
+            <Transition
+              as={React.Fragment}
+              enter="transition ease-out duration-100"
+              enterFrom="transform opacity-0 scale-95"
+              enterTo="transform opacity-100 scale-100"
+              leave="transition ease-in duration-75"
+              leaveFrom="transform opacity-100 scale-100"
+              leaveTo="transform opacity-0 scale-95"
             >
-              前日をコピー
-            </Button>
-            <Button
-              variant="secondary"
-              onClick={autoAssignAllDays}
-              size="sm"
-            >
-              <Shuffle className="h-4 w-4 mr-2" />
-              全期間自動割り当て
-            </Button>
-            <Button
-              variant="danger"
-              onClick={() => setShowResetConfirm(true)}
-              disabled={getAssignedMemberCount() === 0}
-              size="sm"
-            >
-              <RotateCcw className="h-4 w-4 mr-2" />
-              全リセット
-            </Button>
-            <Button
-              variant="primary"
-              onClick={() => setShowAddMember(true)}
-              size="sm"
-            >
-              <Plus className="h-4 w-4 mr-2" />
-              メンバー追加
-            </Button>
-            <Button
-              variant="secondary"
-              onClick={() => setShowAddRoom(true)}
-              size="sm"
-            >
-              <Bed className="h-4 w-4 mr-2" />
-              部屋追加
-            </Button>
-            <Button
-              variant="secondary"
-              onClick={() => setShowBulkAddRoom(true)}
-              size="sm"
-            >
-              <Plus className="h-4 w-4 mr-2" />
-              一括追加
-            </Button>
-          </div>
+              <Menu.Items className="absolute z-10 mt-2 w-48 origin-top-right bg-white border border-gray-200 divide-y divide-gray-100 rounded-md shadow-lg focus:outline-none">
+                <div className="py-1">
+                  <Menu.Item>
+                    {({ active }) => (
+                      <button onClick={() => setShowAddMember(true)} className={`w-full flex items-center gap-2 px-4 py-2 text-sm ${active ? 'bg-blue-50 text-blue-700' : 'text-gray-700'}`}>
+                        <UserPlus className="h-4 w-4" /> メンバー追加
+                      </button>
+                    )}
+                  </Menu.Item>
+                  <Menu.Item>
+                    {({ active }) => (
+                      <button onClick={() => setShowAddRoom(true)} className={`w-full flex items-center gap-2 px-4 py-2 text-sm ${active ? 'bg-blue-50 text-blue-700' : 'text-gray-700'}`}>
+                        <Bed className="h-4 w-4" /> 部屋追加
+                      </button>
+                    )}
+                  </Menu.Item>
+                  <Menu.Item>
+                    {({ active }) => (
+                      <button onClick={() => setShowBulkAddRoom(true)} className={`w-full flex items-center gap-2 px-4 py-2 text-sm ${active ? 'bg-blue-50 text-blue-700' : 'text-gray-700'}`}>
+                        <Layers className="h-4 w-4" /> 一括追加
+                      </button>
+                    )}
+                  </Menu.Item>
+                </div>
+              </Menu.Items>
+            </Transition>
+          </Menu>
+          <button onClick={() => setShowResetConfirm(true)} className="flex items-center gap-2 px-4 py-2 min-w-[100px] bg-red-50 text-red-600 rounded-full hover:bg-red-100 transition text-sm ml-auto">
+            <RotateCcw className="h-4 w-4" /> 全リセット
+          </button>
         </div>
       </div>
 
@@ -796,18 +866,18 @@ const RoomAssignmentTab: React.FC<RoomAssignmentTabProps> = ({ travelInfo }) => 
 
           {/* 部屋別進捗 */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {rooms.map((room) => {
-              const assignedMembers = (currentAssignments[room.id] || [])
+            {roomsForCurrentDay.map((room) => {
+              const assignedMembers = (currentAssignments[room.room_number] || [])
                 .map(id => getMemberById(id))
                 .filter(Boolean) as Member[];
               const occupancyRate = (assignedMembers.length / room.capacity) * 100;
               
                              return (
-                 <div key={room.id} className="bg-gray-50 p-3 rounded-lg">
+                 <div key={room.room_number} className="bg-gray-50 p-3 rounded-lg">
                    <div className="flex justify-between items-center mb-2">
                      <div className="flex items-center gap-2">
                        <div className="flex items-center justify-center w-7 h-7 bg-blue-100 text-blue-600 rounded-full text-xs font-semibold">
-                         {room.id}
+                         {room.room_number}
                        </div>
                        <span className="text-sm font-medium text-gray-900 truncate">{room.name}</span>
                      </div>
@@ -974,14 +1044,14 @@ const RoomAssignmentTab: React.FC<RoomAssignmentTabProps> = ({ travelInfo }) => 
             </div>
           </div>
           <div className="space-y-4">
-            {rooms.map((room) => {
-              const assignedMembers = (currentAssignments[room.id] || [])
+            {roomsForCurrentDay.map((room) => {
+              const assignedMembers = (currentAssignments[room.room_number] || [])
                 .map(id => getMemberById(id))
                 .filter(Boolean) as Member[];
               
               return (
                 <RoomCard
-                  key={room.id}
+                  key={room.room_number}
                   room={room}
                   assignedMembers={assignedMembers}
                   allMembers={members}
@@ -989,7 +1059,7 @@ const RoomAssignmentTab: React.FC<RoomAssignmentTabProps> = ({ travelInfo }) => 
                   onEditRoom={setEditingRoom}
                   onAssignMember={assignMemberToRoom}
                   onDeleteRoom={(roomId) => {
-                    const roomToDelete = rooms.find(r => r.id === roomId);
+                    const roomToDelete = rooms.find(r => r.id === roomId); // ←ここをidで探す
                     if (roomToDelete) {
                       setDeletingRoom(roomToDelete);
                     }
@@ -1024,6 +1094,8 @@ const RoomAssignmentTab: React.FC<RoomAssignmentTabProps> = ({ travelInfo }) => 
         <RoomForm
           onSave={addRoom}
           onCancel={() => setShowAddRoom(false)}
+          travelStartDate={travelInfo?.startDate}
+          travelEndDate={travelInfo?.endDate}
         />
       </Modal>
 
@@ -1038,6 +1110,8 @@ const RoomAssignmentTab: React.FC<RoomAssignmentTabProps> = ({ travelInfo }) => 
           room={editingRoom || undefined}
           onSave={editRoom}
           onCancel={() => setEditingRoom(null)}
+          travelStartDate={travelInfo?.startDate}
+          travelEndDate={travelInfo?.endDate}
         />
       </Modal>
 
@@ -1055,12 +1129,12 @@ const RoomAssignmentTab: React.FC<RoomAssignmentTabProps> = ({ travelInfo }) => 
         onClose={() => setDeletingRoom(null)}
         onConfirm={() => {
           if (deletingRoom) {
-            deleteRoom(deletingRoom.id);
+            deleteRoom(deletingRoom.id || ''); // idがある場合はidを使用
             setDeletingRoom(null);
           }
         }}
         room={deletingRoom}
-        assignedMemberCount={deletingRoom ? (currentAssignments[deletingRoom.id] || []).length : 0}
+        assignedMemberCount={deletingRoom ? (currentAssignments[deletingRoom.room_number] || []).length : 0}
       />
 
       {/* 部屋一括追加モーダル */}
@@ -1075,6 +1149,8 @@ const RoomAssignmentTab: React.FC<RoomAssignmentTabProps> = ({ travelInfo }) => 
           isBulkAdd={true}
           onBulkSave={addBulkRooms}
           onCancel={() => setShowBulkAddRoom(false)}
+          travelStartDate={travelInfo?.startDate}
+          travelEndDate={travelInfo?.endDate}
         />
       </Modal>
     </div>

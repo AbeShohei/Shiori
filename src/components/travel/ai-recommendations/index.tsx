@@ -3,7 +3,7 @@ import { RefreshCw } from 'lucide-react';
 import AIPreferences from './AIPreferences';
 import RecommendationCard from './RecommendationCard';
 import Button from '../../common/Button';
-import { aiApi, GenerateRecommendationsRequest, AIRecommendation } from '../../../services/api';
+import { Place } from '../../../services/travelApi';
 
 /**
  * AI推薦の型定義
@@ -36,6 +36,8 @@ interface TravelPreferences {
   travelStyle: string;
   groupSize: number;
   duration: number;
+  customNote?: string;
+  region?: string;
 }
 
 /**
@@ -45,15 +47,17 @@ interface TravelPreferences {
  */
 interface AIRecommendationsTabProps {
   onAddToPlaces?: (place: any) => void;
+  recommendations: any[];
+  setRecommendations: (recs: any[]) => void;
 }
 
 /**
  * AI推薦タブコンポーネント
  * AIによる旅行推薦の管理、設定変更、フィードバック機能を提供
  */
-const AIRecommendationsTab: React.FC<AIRecommendationsTabProps> = ({ onAddToPlaces }) => {
+const AIRecommendationsTab: React.FC<AIRecommendationsTabProps> = ({ onAddToPlaces, recommendations, setRecommendations }) => {
   // 旅行設定の状態
-  const [preferences, setPreferences] = useState<GenerateRecommendationsRequest>({
+  const [preferences, setPreferences] = useState({
     destination: '',
     region: '',
     interests: ['歴史・文化', '自然・景色', 'グルメ'],
@@ -64,8 +68,22 @@ const AIRecommendationsTab: React.FC<AIRecommendationsTabProps> = ({ onAddToPlac
     customNote: ''
   });
 
-  // AI推薦の状態
-  const [recommendations, setRecommendations] = useState<AIRecommendation[]>([]);
+  // TravelPreferences <-> GenerateRecommendationsRequest 変換
+  const toTravelPreferences = (prefs: any): TravelPreferences => ({
+    interests: prefs.interests,
+    budget: prefs.budget,
+    travelStyle: prefs.travelStyle,
+    groupSize: prefs.groupSize,
+    duration: prefs.duration,
+    customNote: prefs.customNote,
+    region: prefs.region
+  });
+  const toGenerateRecommendationsRequest = (prefs: TravelPreferences): any => ({
+    ...preferences,
+    ...prefs
+  });
+
+  // const [recommendations, setRecommendations] = useState<AIRecommendation[]>([]); // 削除
   const [isGenerating, setIsGenerating] = useState(false);
 
   /**
@@ -75,15 +93,75 @@ const AIRecommendationsTab: React.FC<AIRecommendationsTabProps> = ({ onAddToPlac
     setIsGenerating(true);
     try {
       console.log('AI推薦リクエスト送信前 destination:', preferences.destination);
-      const res = await aiApi.generateRecommendations(preferences);
-      if (res.success) {
-        setRecommendations(res.recommendations.map((rec, idx) => ({ ...rec, id: rec.id || String(idx + 1) })));
-      } else {
-        setRecommendations([]);
-        alert(res.message || res.error || 'AI推薦の生成に失敗しました');
-      }
+      console.log('AI推薦リクエスト送信内容:', preferences);
+      // const res = await aiApi.generateRecommendations(preferences); // aiApiは削除
+      // if (res.success) {
+        // setRecommendations(res.recommendations.map((rec, idx) => ({ ...rec, id: rec.id || String(idx + 1) })));
+      // } else {
+        // setRecommendations([]);
+        // alert(res.message || res.error || 'AI推薦の生成に失敗しました');
+      // }
+      // Placeのダミーデータを使用
+      const dummyRecommendations: AIRecommendation[] = [
+        {
+          id: '1',
+          name: 'サンフランシスコのショッピング',
+          category: 'ショッピング',
+          rating: 4.5,
+          image: 'https://via.placeholder.com/150',
+          description: 'サンフランシスコのビジネス街であるソーラードエリアのショッピングモール。',
+          aiReason: 'ショッピングが好きな人におすすめ',
+          matchScore: 0.95,
+          estimatedTime: '1日',
+          priceRange: '高価',
+          tags: ['ショッピング', 'ビジネス'],
+          isBookmarked: false,
+          address: 'サンフランシスコ, カリフォルニア州',
+          phone: '415-555-0100',
+          website: 'https://www.fishermanswharf.org/',
+          openingHours: '10:00-18:00'
+        },
+        {
+          id: '2',
+          name: 'サンフランシスコのカフェ',
+          category: 'カフェ',
+          rating: 4.0,
+          image: 'https://via.placeholder.com/150',
+          description: 'サンフランシスコのビジネス街であるソーラードエリアのショッピングモール。',
+          aiReason: 'カフェが好きな人におすすめ',
+          matchScore: 0.85,
+          estimatedTime: '1時間',
+          priceRange: '中価',
+          tags: ['カフェ', 'ビジネス'],
+          isBookmarked: false,
+          address: 'サンフランシスコ, カリフォルニア州',
+          phone: '415-555-0101',
+          website: 'https://www.fishermanswharf.org/',
+          openingHours: '08:00-17:00'
+        },
+        {
+          id: '3',
+          name: 'サンフランシスコのビーチ',
+          category: '自然・景色',
+          rating: 5.0,
+          image: 'https://via.placeholder.com/150',
+          description: 'サンフランシスコのビーチです。',
+          aiReason: 'ビーチが好きな人におすすめ',
+          matchScore: 0.98,
+          estimatedTime: '1日',
+          priceRange: '無料',
+          tags: ['ビーチ', '自然'],
+          isBookmarked: false,
+          address: 'サンフランシスコ, カリフォルニア州',
+          phone: '415-555-0102',
+          website: 'https://www.fishermanswharf.org/',
+          openingHours: '06:00-18:00'
+        }
+      ];
+      setRecommendations(dummyRecommendations);
     } catch (e) {
       setRecommendations([]);
+      console.error('AI推薦APIエラー:', e);
       alert('AI推薦の生成に失敗しました');
     } finally {
       setIsGenerating(false);
@@ -103,8 +181,8 @@ const AIRecommendationsTab: React.FC<AIRecommendationsTabProps> = ({ onAddToPlac
    * 場所に追加
    */
   const addToPlaces = (recommendation: AIRecommendation) => {
-    const place = {
-      id: Date.now().toString(),
+    const place: Place = {
+      id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Date.now().toString() + Math.random().toString(36).slice(2),
       name: recommendation.name,
       category: recommendation.category,
       rating: recommendation.rating,
@@ -138,8 +216,8 @@ const AIRecommendationsTab: React.FC<AIRecommendationsTabProps> = ({ onAddToPlac
     <div className="space-y-6">
       {/* AI設定 */}
       <AIPreferences
-        preferences={preferences}
-        onPreferencesChange={setPreferences}
+        preferences={toTravelPreferences(preferences)}
+        onPreferencesChange={(prefs) => setPreferences(toGenerateRecommendationsRequest(prefs))}
       />
 
       {/* 推薦生成ボタン */}

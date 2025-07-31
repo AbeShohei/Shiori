@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Edit, Trash2, Calendar, MapPin, Clock, Tag } from 'lucide-react';
+import { Plus, Edit, Trash2, Calendar, MapPin, Clock, Tag, Edit3, Check } from 'lucide-react';
 import Button from '../../common/Button';
 import Modal from '../../common/Modal';
 import ScheduleItemForm from './ScheduleItemForm';
@@ -7,6 +7,7 @@ import DayEditForm from './DayEditForm';
 import { Travel } from '../../../types/Travel';
 import DayScheduleComponent from './DaySchedule';
 import DeleteConfirmModal from '../TravelCatalog/DeleteConfirmModal';
+import { travelApi } from '../../../services/travelApi';
 
 /**
  * スケジュールアイテムの型定義
@@ -14,6 +15,7 @@ import DeleteConfirmModal from '../TravelCatalog/DeleteConfirmModal';
 interface ScheduleItem {
   id: string;
   time: string;
+  endTime?: string;
   title: string;
   location: string;
   description: string;
@@ -45,6 +47,9 @@ interface TravelInfo {
  */
 interface ScheduleTabProps {
   travelInfo?: Travel;
+  onNavigate?: (tab: string, id?: string) => void;
+  places: any[];
+  setPlaces: (places: any[]) => void;
 }
 
 /**
@@ -105,7 +110,7 @@ const generateDaySchedules = (startDate: string, endDate: string, destination: s
  * スケジュールタブコンポーネント
  * スケジュールの管理、アイテムの追加・編集・削除機能を提供
  */
-const ScheduleTab: React.FC<ScheduleTabProps> = ({ travelInfo }) => {
+const ScheduleTab: React.FC<ScheduleTabProps> = ({ travelInfo, onNavigate, places, setPlaces }) => {
   // スケジュールデータの状態
   const [schedule, setSchedule] = useState<DaySchedule[]>([]);
 
@@ -114,22 +119,44 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({ travelInfo }) => {
     if (travelInfo) {
       // AI生成のスケジュールがある場合はそれを使用
       if (travelInfo.schedule && travelInfo.schedule.length > 0) {
-        // AI生成データをDaySchedule形式に変換
-        const aiSchedules: DaySchedule[] = travelInfo.schedule.map((day, index) => ({
-          date: day.date || `Day ${index + 1}`,
-          day: day.day || `Day ${index + 1}`,
-          dayTitle: day.dayTitle,
-          daySubtitle: day.daySubtitle,
-          items: day.items.map((item, itemIndex) => ({
-            id: item.id || `${index}-${itemIndex}`,
-            time: item.time,
-            title: item.title,
-            location: item.location,
-            description: item.description,
-            category: item.category as 'sightseeing' | 'food' | 'transport' | 'accommodation'
-          }))
-        }));
-        setSchedule(aiSchedules);
+        // スケジュールデータをDaySchedule形式に変換
+        const convertedSchedules: DaySchedule[] = travelInfo.schedule.map((day: any, index: number) => {
+          // 日付を適切にフォーマット
+          let dateStr = '';
+          let dayStr = '';
+          
+          if (day.date) {
+            // ISO形式の日付を日本語形式に変換
+            const date = new Date(day.date);
+            dateStr = date.toLocaleDateString('ja-JP', {
+              year: 'numeric',
+              month: '2-digit',
+              day: '2-digit'
+            }).replace(/\//g, '/');
+            dayStr = `Day ${day.dayNumber || index + 1}`;
+          } else {
+            dateStr = day.date || `Day ${index + 1}`;
+            dayStr = day.day || `Day ${index + 1}`;
+          }
+          return {
+            date: dateStr,
+            day: dayStr,
+            dayTitle: day.dayTitle,
+            daySubtitle: day.daySubtitle,
+            items: day.items.map((item: any, itemIndex: number) => ({
+              id: item.id || `${index}-${itemIndex}`,
+              time: item.time || '',
+              endTime: item.endTime || '',
+              title: item.title || '',
+              location: item.location || '',
+              description: item.description || '',
+              category: item.category || 'sightseeing',
+              linkType: item.linkType,
+              linkId: item.linkId
+            }))
+          };
+        });
+        setSchedule(convertedSchedules);
       } else {
         // AI生成データがない場合は基本情報から生成
         const generatedSchedules = generateDaySchedules(
@@ -154,6 +181,9 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({ travelInfo }) => {
   const [editingItem, setEditingItem] = useState<ScheduleItem | null>(null);
   const [deletingItemId, setDeletingItemId] = useState<string | null>(null);
   const [editingDay, setEditingDay] = useState<DaySchedule | null>(null);
+
+  // 編集モードをScheduleTabで一元管理
+  const [isEditMode, setIsEditMode] = useState(false);
 
   /**
    * アイテム追加
@@ -195,11 +225,15 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({ travelInfo }) => {
    */
   const confirmDelete = () => {
     if (selectedDayIndex !== null && deletingItemId) {
-      setSchedule(prev => prev.map((day, index) => 
-        index === selectedDayIndex 
-          ? { ...day, items: day.items.filter(item => item.id !== deletingItemId) }
-          : day
-      ));
+      setSchedule(prev => {
+        const newSchedule = prev.map((day, index) => 
+          index === selectedDayIndex 
+            ? { ...day, items: day.items.filter(item => item.id !== deletingItemId) }
+            : day
+        );
+        saveScheduleToDB(newSchedule);
+        return newSchedule;
+      });
       setShowDeleteConfirm(false);
       setDeletingItemId(null);
     }
@@ -210,17 +244,40 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({ travelInfo }) => {
    */
   const saveNewItem = (item: ScheduleItem) => {
     if (selectedDayIndex !== null) {
-      setSchedule(prev => prev.map((day, index) => 
-        index === selectedDayIndex 
-          ? { ...day, items: [...day.items, item].sort((a, b) => {
-              // 時間が空の場合は最後に表示
-              if (!a.time && !b.time) return 0;
-              if (!a.time) return 1;
-              if (!b.time) return -1;
-              return a.time.localeCompare(b.time);
-            }) }
-          : day
-      ));
+      setSchedule(prev => {
+        const newSchedule = prev.map((day, index) => 
+          index === selectedDayIndex 
+            ? { ...day, items: [...day.items, item].sort((a, b) => {
+                if (!a.time && !b.time) return 0;
+                if (!a.time) return 1;
+                if (!b.time) return -1;
+                return a.time.localeCompare(b.time);
+              }) }
+            : day
+        );
+        saveScheduleToDB(newSchedule);
+        return newSchedule;
+      });
+      // --- ここから観光スポットにも追加 ---
+      if (setPlaces && places && ['sightseeing', 'food', 'accommodation'].includes(item.category)) {
+        // 既存スポットと重複しない場合のみ追加
+        const exists = places.some(p => p.name === item.title && p.category === item.category && p.address === item.location);
+        if (!exists) {
+          const newPlace = {
+            id: item.linkId || item.id || Date.now().toString(),
+            name: item.title,
+            category: item.category === 'sightseeing' ? '観光' : item.category === 'food' ? 'グルメ' : item.category === 'accommodation' ? '宿泊' : '',
+            rating: 4.0,
+            image: '',
+            description: item.description || '',
+            address: item.location || '',
+            openingHours: '',
+            priceRange: '',
+            isFavorite: false
+          };
+          setPlaces([...places, newPlace]);
+        }
+      }
       setShowAddModal(false);
     }
   };
@@ -230,22 +287,25 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({ travelInfo }) => {
    */
   const saveEditedItem = (item: ScheduleItem) => {
     if (selectedDayIndex !== null) {
-      setSchedule(prev => prev.map((day, index) => 
-        index === selectedDayIndex 
-          ? { 
-              ...day, 
-              items: day.items.map(i => 
-                i.id === item.id ? item : i
-              ).sort((a, b) => {
-                // 時間が空の場合は最後に表示
-                if (!a.time && !b.time) return 0;
-                if (!a.time) return 1;
-                if (!b.time) return -1;
-                return a.time.localeCompare(b.time);
-              })
-            }
-          : day
-      ));
+      setSchedule(prev => {
+        const newSchedule = prev.map((day, index) => 
+          index === selectedDayIndex 
+            ? { 
+                ...day, 
+                items: day.items.map(i => 
+                  i.id === item.id ? item : i
+                ).sort((a, b) => {
+                  if (!a.time && !b.time) return 0;
+                  if (!a.time) return 1;
+                  if (!b.time) return -1;
+                  return a.time.localeCompare(b.time);
+                })
+              }
+            : day
+        );
+        saveScheduleToDB(newSchedule);
+        return newSchedule;
+      });
       setShowEditModal(false);
       setEditingItem(null);
     }
@@ -256,15 +316,19 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({ travelInfo }) => {
    */
   const saveDayEdit = (dayData: Partial<DaySchedule>) => {
     if (selectedDayIndex !== null) {
-      setSchedule(prev => prev.map((day, index) => 
-        index === selectedDayIndex 
-          ? { 
-              ...day, 
-              dayTitle: dayData.dayTitle,
-              daySubtitle: dayData.daySubtitle
-            }
-          : day
-      ));
+      setSchedule(prev => {
+        const newSchedule = prev.map((day, index) => 
+          index === selectedDayIndex 
+            ? { 
+                ...day, 
+                dayTitle: dayData.dayTitle,
+                daySubtitle: dayData.daySubtitle
+              }
+            : day
+        );
+        saveScheduleToDB(newSchedule);
+        return newSchedule;
+      });
       setShowDayEditModal(false);
       setEditingDay(null);
     }
@@ -286,26 +350,63 @@ const ScheduleTab: React.FC<ScheduleTabProps> = ({ travelInfo }) => {
    * 予定の並び替え
    */
   const handleReorderItems = (newItems: ScheduleItem[], dayIndex: number) => {
-    setSchedule(prev => prev.map((day, idx) =>
-      idx === dayIndex ? { ...day, items: newItems } : day
-    ));
+    setSchedule(prev => {
+      const newSchedule = prev.map((day, idx) =>
+        idx === dayIndex ? { ...day, items: newItems } : day
+      );
+      saveScheduleToDB(newSchedule);
+      return newSchedule;
+    });
+  };
+
+  // スケジュールをDBに保存
+  const saveScheduleToDB = async (newSchedule: DaySchedule[]) => {
+    if (travelInfo && travelInfo.id) {
+      try {
+        await travelApi.updateTravel(travelInfo.id, { schedule: newSchedule });
+      } catch (e) {
+        // 必要ならエラー通知
+        console.error('スケジュールの保存に失敗しました', e);
+      }
+    }
   };
 
   return (
     <div className="space-y-8">
+      {/* 右下追従の丸編集ボタン（全日共通） */}
+      <button
+        className={`fixed bottom-6 right-6 z-50 w-14 h-14 rounded-full shadow-lg flex items-center justify-center text-white text-xl transition-colors ${isEditMode ? 'bg-green-600 hover:bg-green-700' : 'bg-gray-600 hover:bg-gray-700'}`}
+        onClick={() => setIsEditMode(!isEditMode)}
+        aria-label={isEditMode ? '編集完了' : '編集モード'}
+      >
+        {isEditMode ? <Check className="w-7 h-7" /> : <Edit3 className="w-7 h-7" />}
+      </button>
       {/* 日別スケジュール一覧 */}
-      {schedule.map((day, idx) => (
-        <DayScheduleComponent
-          key={day.date}
-          day={day}
-          dayIndex={idx}
-          onAddItem={handleAddItem}
-          onEditItem={handleEditItem}
-          onDeleteItem={handleDeleteClick}
-          onEditDay={handleEditDay}
-          onReorderItems={handleReorderItems}
-        />
-      ))}
+      {schedule.length > 0 ? (
+        <div className="space-y-8">
+          {schedule.map((day, idx) => (
+            <DayScheduleComponent
+              key={day.date}
+              day={day}
+              dayIndex={idx}
+              onAddItem={handleAddItem}
+              onEditItem={handleEditItem}
+              onDeleteItem={handleDeleteClick}
+              onEditDay={handleEditDay}
+              onReorderItems={handleReorderItems}
+              onNavigate={onNavigate}
+              isEditMode={isEditMode}
+            />
+          ))}
+        </div>
+      ) : (
+        <div className="text-center py-12">
+          <Calendar className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+          <p className="text-gray-500 dark:text-gray-400">
+            まだ予定がありません。新しい予定を追加してください。
+          </p>
+        </div>
+      )}
 
       {/* アイテム追加モーダル */}
       <Modal

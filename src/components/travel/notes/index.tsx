@@ -4,6 +4,7 @@ import NoteCard from './NoteCard';
 import NoteForm from './NoteForm';
 import Modal from '../../common/Modal';
 import Button from '../../common/Button';
+import { notesApi } from '../../../services/notesApi';
 
 /**
  * メモの型定義
@@ -14,6 +15,7 @@ interface Note {
   content: string;
   category: string;
   createdAt: string;
+  updatedAt?: string;
   isPinned: boolean;
 }
 
@@ -30,14 +32,15 @@ interface NoteData {
  * メモタブコンポーネントのプロパティ
  */
 interface NotesTabProps {
-  notesData?: NoteData[];
+  travelId: string;
+  userId: string;
 }
 
 /**
  * メモタブコンポーネント
  * メモの一覧表示、追加、編集、削除機能を提供
  */
-const NotesTab: React.FC<NotesTabProps> = ({ notesData }) => {
+const NotesTab: React.FC<NotesTabProps> = ({ travelId, userId }) => {
   // メモデータの状態
   const [notes, setNotes] = useState<Note[]>([]);
 
@@ -52,31 +55,61 @@ const NotesTab: React.FC<NotesTabProps> = ({ notesData }) => {
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingNote, setEditingNote] = useState<Note | null>(null);
 
-  // AI生成のメモデータを初期メモとして設定
+  // 削除確認モーダル用state
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deletingNoteId, setDeletingNoteId] = useState<string | null>(null);
+
+  // DB→UI変換
+  function dbNoteToUi(note: any): Note {
+    return {
+      id: note.id,
+      title: note.title,
+      content: note.content,
+      category: note.category,
+      createdAt: note.created_at,
+      updatedAt: note.updated_at,
+      isPinned: note.is_pinned,
+    };
+  }
+  // UI→DB変換
+  function uiNoteToDb(note: Note, travelId: string): Omit<any, 'id' | 'created_at' | 'updated_at'> {
+    return {
+      travel_id: travelId,
+      title: note.title,
+      content: note.content,
+      category: note.category,
+      is_pinned: note.isPinned,
+    };
+  }
+
+  // DBからメモを取得
   useEffect(() => {
-    if (notesData && notesData.length > 0) {
-      const aiNotes: Note[] = notesData.map((note, index) => ({
-        id: `ai-${index}`,
-        title: note.title,
-        content: note.content,
-        category: note.category,
-        createdAt: new Date().toISOString().split('T')[0],
-        isPinned: false
-      }));
-      setNotes(aiNotes);
-    } else {
-      // AI生成データがない場合は空のリスト
-      setNotes([]);
-    }
-  }, [notesData]);
+    if (!travelId || !userId) return;
+    (async () => {
+      let notes = await notesApi.getNotes(travelId, userId);
+      if (notes.length === 0) {
+        await notesApi.createNote({
+          travel_id: travelId,
+          user_id: userId,
+          title: '最初のメモ',
+          content: '',
+          category: '旅行準備',
+          is_pinned: false,
+        });
+        notes = await notesApi.getNotes(travelId, userId);
+      }
+      setNotes(notes.map(dbNoteToUi));
+    })();
+  }, [travelId, userId]);
 
   /**
    * ピン留め切り替え
    */
-  const togglePin = (id: string) => {
-    setNotes(notes.map(note => 
-      note.id === id ? { ...note, isPinned: !note.isPinned } : note
-    ));
+  const togglePin = async (id: string) => {
+    const note = notes.find(n => n.id === id);
+    if (!note) return;
+    const updated = await notesApi.updateNote({ ...uiNoteToDb({ ...note, isPinned: !note.isPinned }, travelId), id });
+    setNotes(notes.map(n => n.id === id ? dbNoteToUi(updated) : n));
   };
 
   /**
@@ -97,23 +130,40 @@ const NotesTab: React.FC<NotesTabProps> = ({ notesData }) => {
   /**
    * メモ削除
    */
-  const deleteNote = (id: string) => {
-    setNotes(notes.filter(note => note.id !== id));
+  const deleteNoteHandler = async (id: string) => {
+    setDeletingNoteId(id);
+    setShowDeleteConfirm(true);
+  };
+  // 確認OK時の実処理
+  const confirmDelete = async () => {
+    if (deletingNoteId) {
+      await notesApi.deleteNote(deletingNoteId);
+      setNotes(notes.filter(note => note.id !== deletingNoteId));
+      setDeletingNoteId(null);
+      setShowDeleteConfirm(false);
+    }
+  };
+  // キャンセル時
+  const cancelDelete = () => {
+    setDeletingNoteId(null);
+    setShowDeleteConfirm(false);
   };
 
   /**
    * 新しいメモを保存
    */
-  const saveNewNote = (note: Note) => {
-    setNotes([...notes, note]);
+  const saveNewNote = async (note: Note) => {
+    const dbNote = await notesApi.createNote(uiNoteToDb(note, travelId));
+    setNotes([dbNoteToUi(dbNote), ...notes]);
     setShowAddModal(false);
   };
 
   /**
    * 編集したメモを保存
    */
-  const saveEditedNote = (note: Note) => {
-    setNotes(notes.map(n => n.id === note.id ? note : n));
+  const saveEditedNote = async (note: Note) => {
+    const updated = await notesApi.updateNote({ ...uiNoteToDb(note, travelId), id: note.id });
+    setNotes(notes.map(n => n.id === note.id ? dbNoteToUi(updated) : n));
     setShowEditModal(false);
     setEditingNote(null);
   };
@@ -173,7 +223,7 @@ const NotesTab: React.FC<NotesTabProps> = ({ notesData }) => {
                 note={note}
                 onTogglePin={togglePin}
                 onEdit={handleEditNote}
-                onDelete={deleteNote}
+                onDelete={deleteNoteHandler}
               />
             ))}
           </div>
@@ -193,7 +243,7 @@ const NotesTab: React.FC<NotesTabProps> = ({ notesData }) => {
                 note={note}
                 onTogglePin={togglePin}
                 onEdit={handleEditNote}
-                onDelete={deleteNote}
+                onDelete={deleteNoteHandler}
               />
             ))}
           </div>
@@ -247,6 +297,23 @@ const NotesTab: React.FC<NotesTabProps> = ({ notesData }) => {
           }}
         />
       </Modal>
+
+      {showDeleteConfirm && (
+        <Modal
+          isOpen={showDeleteConfirm}
+          onClose={cancelDelete}
+          title="メモの削除確認"
+          size="sm"
+        >
+          <div className="py-4 text-center">
+            <p className="mb-4">本当にこのメモを削除しますか？</p>
+            <div className="flex justify-center gap-4">
+              <Button variant="secondary" onClick={cancelDelete}>キャンセル</Button>
+              <Button variant="danger" onClick={confirmDelete}>削除する</Button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 };

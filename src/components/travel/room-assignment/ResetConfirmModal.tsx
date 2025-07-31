@@ -1,6 +1,7 @@
 import React from 'react';
 import { AlertTriangle, RotateCcw } from 'lucide-react';
 import Button from '../../common/Button';
+import Modal from '../../common/Modal';
 
 /**
  * リセット確認モーダルのプロパティ
@@ -23,28 +24,25 @@ const ResetConfirmModal: React.FC<ResetConfirmModalProps> = ({
   memberCount
 }) => {
   return (
-    <div className={`fixed inset-0 z-50 flex items-center justify-center ${isOpen ? '' : 'hidden'}`}>
-      {/* オーバーレイ */}
-      <div 
-        className="absolute inset-0 bg-black bg-opacity-50"
-        onClick={onClose}
-      />
-      
-      {/* モーダル */}
-      <div className="relative bg-white rounded-lg shadow-xl max-w-md w-full mx-4 dark:bg-gray-800">
-        {/* ヘッダー */}
-        <div className="flex items-center gap-3 p-6 border-b border-gray-200 dark:border-gray-700">
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title="割り当てをリセット"
+      size="md"
+    >
+      <div className="space-y-6">
+        {/* ヘッダーアイコン */}
+        <div className="flex items-center gap-3">
           <div className="flex items-center justify-center w-10 h-10 bg-red-100 rounded-full dark:bg-red-900">
             <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400" />
           </div>
           <div>
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">割り当てをリセット</h3>
             <p className="text-sm text-gray-600 dark:text-gray-400">この操作は取り消せません</p>
           </div>
         </div>
         
         {/* コンテンツ */}
-        <div className="p-6">
+        <div>
           <div className="flex items-start gap-3 mb-4">
             <RotateCcw className="h-5 w-5 text-gray-500 dark:text-gray-400 mt-0.5" />
             <div>
@@ -70,8 +68,8 @@ const ResetConfirmModal: React.FC<ResetConfirmModalProps> = ({
           </div>
         </div>
         
-        {/* フッター */}
-        <div className="flex gap-3 p-6 border-t border-gray-200 dark:border-gray-700">
+        {/* ボタン群 */}
+        <div className="flex gap-3 pt-4">
           <Button
             variant="secondary"
             onClick={onClose}
@@ -91,7 +89,7 @@ const ResetConfirmModal: React.FC<ResetConfirmModalProps> = ({
           </Button>
         </div>
       </div>
-    </div>
+    </Modal>
   );
 };
 

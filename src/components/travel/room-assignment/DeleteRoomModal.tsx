@@ -1,6 +1,7 @@
 import React from 'react';
 import { AlertTriangle, Trash2, Users } from 'lucide-react';
 import Button from '../../common/Button';
+import Modal from '../../common/Modal';
 
 /**
  * 部屋の型定義
@@ -40,33 +41,30 @@ const DeleteRoomModal: React.FC<DeleteRoomModalProps> = ({
   if (!room) return null;
 
   return (
-    <div className={`fixed inset-0 z-50 flex items-center justify-center ${isOpen ? '' : 'hidden'}`}>
-      {/* オーバーレイ */}
-      <div 
-        className="absolute inset-0 bg-black bg-opacity-50"
-        onClick={onClose}
-      />
-      
-      {/* モーダル */}
-      <div className="relative bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
-        {/* ヘッダー */}
-        <div className="flex items-center gap-3 p-6 border-b border-gray-200">
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title="部屋を削除"
+      size="md"
+    >
+      <div className="space-y-6">
+        {/* ヘッダーアイコン */}
+        <div className="flex items-center gap-3">
           <div className="flex items-center justify-center w-10 h-10 bg-red-100 rounded-full">
             <Trash2 className="h-5 w-5 text-red-600" />
           </div>
           <div>
-            <h3 className="text-lg font-semibold text-gray-900">部屋を削除</h3>
             <p className="text-sm text-gray-600">この操作は取り消せません</p>
           </div>
         </div>
         
         {/* コンテンツ */}
-        <div className="p-6">
+        <div>
           <div className="flex items-start gap-3 mb-4">
             <AlertTriangle className="h-5 w-5 text-gray-500 mt-0.5" />
             <div>
               <p className="text-gray-900 mb-2">
-                部屋 <span className="font-semibold">{room.name}</span> (部屋番号: {room.id}) を削除します。
+                部屋 <span className="font-semibold">{room.name}</span> (部屋番号: {room.room_number}) を削除します。
               </p>
               {assignedMemberCount > 0 && (
                 <p className="text-sm text-red-600 mb-2">
@@ -84,7 +82,7 @@ const DeleteRoomModal: React.FC<DeleteRoomModalProps> = ({
             <div className="grid grid-cols-2 gap-4 text-sm">
               <div>
                 <span className="text-gray-600">部屋番号:</span>
-                <span className="ml-2 font-medium">{room.id}</span>
+                <span className="ml-2 font-medium">{room.room_number}</span>
               </div>
               <div>
                 <span className="text-gray-600">タイプ:</span>
@@ -114,8 +112,8 @@ const DeleteRoomModal: React.FC<DeleteRoomModalProps> = ({
           </div>
         </div>
         
-        {/* フッター */}
-        <div className="flex gap-3 p-6 border-t border-gray-200">
+        {/* ボタン群 */}
+        <div className="flex gap-3 pt-4">
           <Button
             variant="secondary"
             onClick={onClose}
@@ -135,7 +133,7 @@ const DeleteRoomModal: React.FC<DeleteRoomModalProps> = ({
           </Button>
         </div>
       </div>
-    </div>
+    </Modal>
   );
 };
 

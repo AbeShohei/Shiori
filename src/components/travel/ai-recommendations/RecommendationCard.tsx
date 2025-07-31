@@ -49,6 +49,14 @@ const RecommendationCard: React.FC<RecommendationCardProps> = ({
   onAddToPlaces,
   onFeedback
 }) => {
+  // 保存済み状態をローカルで管理
+  const [isSaved, setIsSaved] = React.useState(false);
+
+  const handleSave = () => {
+    onAddToPlaces(recommendation);
+    setIsSaved(true);
+  };
+
   /**
    * マッチスコアに応じた色を取得
    */
@@ -61,40 +69,22 @@ const RecommendationCard: React.FC<RecommendationCardProps> = ({
 
   return (
     <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition-shadow dark:bg-gray-800 dark:border-gray-700">
-      {/* 画像（imageが空でなければ表示） */}
-      {recommendation.image && (
-        <div className="relative h-48 bg-gray-200">
-          <img 
-            src={recommendation.image} 
-            alt={recommendation.name}
-            className="w-full h-full object-cover"
-            onError={e => {
-              const target = e.target as HTMLImageElement;
-              target.onerror = null;
-              target.src = 'https://images.pexels.com/photos/1008155/pexels-photo-1008155.jpeg?auto=compress&w=600';
-            }}
-          />
-          <div className="absolute top-3 right-3 flex gap-1">
-            <button
-              onClick={() => onToggleBookmark(recommendation.id)}
-              className={`p-2 rounded-full transition-colors ${
-                recommendation.isBookmarked 
-                  ? 'bg-yellow-500 text-white' 
-                  : 'bg-white/80 text-gray-600 hover:bg-yellow-500 hover:text-white'
-              }`}
-              aria-label={recommendation.isBookmarked ? 'ブックマーク解除' : 'ブックマーク追加'}
-            >
-              <Bookmark className="h-4 w-4" />
-            </button>
-          </div>
-          <div className="absolute top-3 left-3">
-            <span className={`px-2 py-1 rounded-full text-xs font-medium ${getMatchScoreColor(recommendation.matchScore)}`}>
-              {recommendation.matchScore}% マッチ
-            </span>
-          </div>
+      {/* マッチ度バッジを削除し、上部のブックマークボタンのみ残す */}
+      <div className="relative h-0">
+        <div className="absolute top-3 right-3 flex gap-1">
+          <button
+            onClick={() => onToggleBookmark(recommendation.id)}
+            className={`p-2 rounded-full transition-colors ${
+              recommendation.isBookmarked 
+                ? 'bg-yellow-500 text-white' 
+                : 'bg-white/80 text-gray-600 hover:bg-yellow-500 hover:text-white'
+            }`}
+            aria-label={recommendation.isBookmarked ? 'ブックマーク解除' : 'ブックマーク追加'}
+          >
+            <Bookmark className="h-4 w-4" />
+          </button>
         </div>
-      )}
-      
+      </div>
       {/* コンテンツ */}
       <div className="p-4">
         {/* ヘッダー */}
@@ -102,10 +92,6 @@ const RecommendationCard: React.FC<RecommendationCardProps> = ({
           <div className="min-w-0 flex-1">
             <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 truncate">{recommendation.name}</h3>
             <p className="text-sm text-gray-600 dark:text-gray-400">{recommendation.category}</p>
-          </div>
-          <div className="flex items-center gap-1 ml-2">
-            <Star className="h-4 w-4 text-yellow-500 fill-current" />
-            <span className="text-sm font-medium text-gray-900 dark:text-gray-100">{recommendation.rating}</span>
           </div>
         </div>
         
@@ -131,7 +117,7 @@ const RecommendationCard: React.FC<RecommendationCardProps> = ({
         
         {/* タグ */}
         <div className="flex flex-wrap gap-1 mb-4">
-          {recommendation.tags.map((tag, index) => (
+          {(recommendation.tags || []).map((tag, index) => (
             <span 
               key={index}
               className="px-2 py-1 bg-gray-100 text-gray-700 text-xs rounded-full dark:bg-gray-700 dark:text-gray-300"
@@ -159,15 +145,25 @@ const RecommendationCard: React.FC<RecommendationCardProps> = ({
               <ThumbsDown className="h-4 w-4" />
             </button>
           </div>
-          
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={() => onAddToPlaces(recommendation)}
-          >
-            <Plus className="h-4 w-4 mr-1" />
-            場所に追加
-          </Button>
+          {isSaved ? (
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled
+              className="bg-gray-300 text-white cursor-not-allowed"
+            >
+              保存済み
+            </Button>
+          ) : (
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={handleSave}
+            >
+              <Plus className="h-4 w-4 mr-1" />
+              保存
+            </Button>
+          )}
         </div>
       </div>
     </div>

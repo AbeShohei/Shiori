@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import Input from '../../common/Input';
 import Button from '../../common/Button';
-import { travelApi } from '../../../services/api';
+import { travelApi } from '../../../services/travelApi';
+import { memberApi, Member } from '../../../services/memberApi';
 
 /**
  * メンバーの型定義
@@ -77,15 +78,16 @@ const MemberForm: React.FC<MemberFormProps> = ({ onSave, onCancel, initialData, 
   /**
    * 保存処理
    */
-  const handleSave = () => {
+  const handleSave = async () => {
     if (isFormValid()) {
-      const newMember: Member = {
-        id: isEdit && initialData ? initialData.id : Date.now().toString(),
-        name: formData.name.trim(),
-        gender: formData.gender,
-        preferences: formData.preferences
-      };
-      onSave(newMember);
+      if (isEdit && initialData) {
+        await memberApi.updateMember(initialData.id, formData);
+        onSave({ ...initialData, ...formData });
+      } else {
+        // travel_idは親から渡す or contextで取得
+        // ここではonSaveでtravel_idを付与してもらう
+        onSave(formData);
+      }
     }
   };
 

@@ -79,7 +79,7 @@ const Input: React.FC<InputProps> = ({
         <textarea
           className={baseClasses}
           placeholder={placeholder}
-          value={value}
+          value={value ?? ""}
           onChange={e => onChange && onChange(e.target.value)}
           disabled={disabled}
           required={required}
@@ -90,7 +90,7 @@ const Input: React.FC<InputProps> = ({
           type={type}
           className={baseClasses}
           placeholder={placeholder}
-          value={value}
+          value={value ?? ""}
           onChange={handleChange}
           disabled={disabled}
           required={required}

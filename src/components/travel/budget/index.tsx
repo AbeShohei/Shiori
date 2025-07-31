@@ -6,6 +6,7 @@ import ExpenseForm from './ExpenseForm';
 import Modal from '../../common/Modal';
 import Button from '../../common/Button';
 import Input from '../../common/Input';
+import { budgetApi, travelApi } from '../../../services/travelApi';
 
 /**
  * 支出項目の型定義
@@ -42,6 +43,8 @@ interface CategoryBudget {
  * 予算タブコンポーネントのプロパティ
  */
 interface BudgetTabProps {
+  travelId?: string;
+  userId: string;
   budgetData?: BudgetData;
 }
 
@@ -49,7 +52,7 @@ interface BudgetTabProps {
  * 予算タブコンポーネント
  * 予算管理、支出の追加・編集・削除機能を提供
  */
-const BudgetTab: React.FC<BudgetTabProps> = ({ budgetData }) => {
+const BudgetTab: React.FC<BudgetTabProps> = ({ travelId, userId }) => {
   // 支出データの状態
   const [expenses, setExpenses] = useState<Expense[]>([]);
 
@@ -58,8 +61,11 @@ const BudgetTab: React.FC<BudgetTabProps> = ({ budgetData }) => {
 
   // カテゴリの状態
   const [categories, setCategories] = useState<string[]>([
-    '交通費', '宿泊費', '食費', '観光費', 'ショッピング', 'その他'
+    '交通費', '宿泊費', '食費', '観光費', 'その他'
   ]);
+
+  // 合計予算（travelテーブルのbudget）
+  const [travelBudget, setTravelBudget] = useState<number>(0);
 
   // モーダルの状態
   const [showAddExpenseModal, setShowAddExpenseModal] = useState(false);
@@ -68,26 +74,84 @@ const BudgetTab: React.FC<BudgetTabProps> = ({ budgetData }) => {
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
   const [newCategory, setNewCategory] = useState('');
 
-  // AI生成の予算データを初期支出として設定
+  // 編集用の一時stateを追加
+  const [editAmounts, setEditAmounts] = useState<{ [category: string]: string }>({});
+
+  // 予算編集用state
+  const [isEditingBudget, setIsEditingBudget] = useState(false);
+  const [editBudgetValue, setEditBudgetValue] = useState('');
+
+  // 編集開始時に一時stateに初期値をセット
+  const startEditBudget = (category: string) => {
+    setCategoryBudgets(prev => prev.map(budget =>
+      budget.category === category ? { ...budget, isEditing: true } : budget
+    ));
+    setEditAmounts(prev => ({
+      ...prev,
+      [category]: categoryBudgets.find(b => b.category === category)?.amount.toString() || ''
+    }));
+  };
+
+  // 旅行情報の取得
   useEffect(() => {
-    if (budgetData) {
-      // AI推測予算をカテゴリ別予算に設定
-      const aiCategoryBudgets: CategoryBudget[] = [
-        { category: '交通費', amount: budgetData.transportation, isEditing: false },
-        { category: '宿泊費', amount: budgetData.accommodation, isEditing: false },
-        { category: '食費', amount: budgetData.food, isEditing: false },
-        { category: '観光費', amount: budgetData.activities, isEditing: false }
-      ];
-      setCategoryBudgets(aiCategoryBudgets);
-    } else {
-      // AI生成データがない場合は空のリスト
-      setExpenses([]);
-      setCategoryBudgets([]);
+    if (travelId) {
+      travelApi.getTravel(travelId).then((travel) => {
+        setTravelBudget(travel.budget || 0);
+        let breakdownArr = [];
+        if (Array.isArray(travel.budget_breakdown)) {
+          breakdownArr = travel.budget_breakdown.map((b) => {
+            const editing = categoryBudgets.find(cb => cb.category === b.category)?.isEditing || false;
+            return { ...b, isEditing: editing };
+          });
+        } else if (typeof travel.budget_breakdown === 'object' && travel.budget_breakdown !== null) {
+          breakdownArr = [
+            { category: '交通費', amount: travel.budget_breakdown.transportation || 0, isEditing: categoryBudgets.find(cb => cb.category === '交通費')?.isEditing || false },
+            { category: '宿泊費', amount: travel.budget_breakdown.accommodation || 0, isEditing: categoryBudgets.find(cb => cb.category === '宿泊費')?.isEditing || false },
+            { category: '食費', amount: travel.budget_breakdown.food || 0, isEditing: categoryBudgets.find(cb => cb.category === '食費')?.isEditing || false },
+            { category: '観光費', amount: travel.budget_breakdown.activities || 0, isEditing: categoryBudgets.find(cb => cb.category === '観光費')?.isEditing || false }
+          ];
+        }
+        // すべてのカテゴリのamountが0または未設定なら、自動分配
+        const allZero = breakdownArr.length > 0 && breakdownArr.every(b => !b.amount || b.amount === 0);
+        if (allZero && travel.budget) {
+          const total = travel.budget;
+          breakdownArr = [
+            { category: '交通費', amount: Math.round(total * 0.3), isEditing: false },
+            { category: '宿泊費', amount: Math.round(total * 0.4), isEditing: false },
+            { category: '食費', amount: Math.round(total * 0.2), isEditing: false },
+            { category: '観光費', amount: Math.round(total * 0.1), isEditing: false }
+          ];
+          // Supabaseにも保存
+          travelApi.updateTravel(travelId, {
+            budget_breakdown: breakdownArr.map(({ isEditing, ...rest }) => rest)
+          });
+        }
+        setCategoryBudgets(breakdownArr);
+      });
     }
-  }, [budgetData]);
+  }, [travelId]);
+
+  // 支出履歴をSupabaseから取得
+  useEffect(() => {
+    if (!travelId || !userId) return;
+    (async () => {
+      let budgets = await budgetApi.getBudgets(travelId, userId);
+      if (budgets.length === 0) {
+        await budgetApi.createBudget({
+          travel_id: travelId,
+          user_id: userId,
+          amount: 0,
+          breakdown: { category: '全体予算', title: '初期予算', type: 'initial' }
+        });
+        budgets = await budgetApi.getBudgets(travelId, userId);
+      }
+      setTravelBudget(budgets[0]?.amount || 0);
+      // 必要に応じてsetExpensesも更新
+    })();
+  }, [travelId, userId]);
 
   // 予算計算
-  const totalBudget = categoryBudgets.reduce((sum, budget) => sum + budget.amount, 0);
+  const totalBudget = travelBudget;
   const totalExpenses = expenses.reduce((sum, expense) => 
     expense.type === 'expense' ? sum + expense.amount : sum - expense.amount, 0
   );
@@ -101,21 +165,21 @@ const BudgetTab: React.FC<BudgetTabProps> = ({ budgetData }) => {
   }, {} as Record<string, number>);
 
   /**
-   * カテゴリ予算の編集開始
-   */
-  const startEditBudget = (category: string) => {
-    setCategoryBudgets(prev => prev.map(budget => 
-      budget.category === category ? { ...budget, isEditing: true } : budget
-    ));
-  };
-
-  /**
    * カテゴリ予算の保存
    */
-  const saveBudget = (category: string, amount: number) => {
-    setCategoryBudgets(prev => prev.map(budget => 
+  const saveBudget = async (category: string, amount: number) => {
+    const newBudgets = categoryBudgets.map(budget =>
       budget.category === category ? { ...budget, amount, isEditing: false } : budget
-    ));
+    );
+    setCategoryBudgets(newBudgets);
+    if (travelId) {
+      await travelApi.updateTravel(travelId, { budget_breakdown: newBudgets.map(({ isEditing, ...rest }) => rest) });
+      // 保存後に再取得して最新化
+      const travel = await travelApi.getTravel(travelId);
+      if (travel.budget_breakdown && Array.isArray(travel.budget_breakdown)) {
+        setCategoryBudgets(travel.budget_breakdown.map((b: any) => ({ ...b, isEditing: false })));
+      }
+    }
   };
 
   /**
@@ -125,6 +189,19 @@ const BudgetTab: React.FC<BudgetTabProps> = ({ budgetData }) => {
     setCategoryBudgets(prev => prev.map(budget => 
       budget.category === category ? { ...budget, isEditing: false } : budget
     ));
+    setEditAmounts(prev => ({ ...prev, [category]: undefined }));
+  };
+
+  /**
+   * 予算保存処理
+   */
+  const saveBudgetTotal = async () => {
+    if (travelId && editBudgetValue) {
+      const newBudget = parseInt(editBudgetValue, 10) || 0;
+      await travelApi.updateTravel(travelId, { budget: newBudget });
+      setTravelBudget(newBudget);
+      setIsEditingBudget(false);
+    }
   };
 
   /**
@@ -145,23 +222,83 @@ const BudgetTab: React.FC<BudgetTabProps> = ({ budgetData }) => {
   /**
    * 支出削除
    */
-  const deleteExpense = (id: string) => {
-    setExpenses(expenses.filter(expense => expense.id !== id));
+  const deleteExpense = async (id: string) => {
+    if (travelId) {
+      await budgetApi.deleteBudget(id);
+      // 再取得
+      const budgets = await budgetApi.getBudgets(travelId, userId);
+      const loadedExpenses = budgets.map(b => ({
+        id: b.id,
+        date: b.created_at || '',
+        category: b.breakdown?.category || 'その他',
+        title: b.breakdown?.title || '',
+        amount: b.amount,
+        type: b.breakdown?.type || 'expense',
+      }));
+      setExpenses(loadedExpenses);
+    } else {
+      setExpenses(expenses.filter(expense => expense.id !== id));
+    }
   };
 
   /**
    * 新しい支出を保存
    */
-  const saveNewExpense = (expense: Expense) => {
-    setExpenses([...expenses, expense]);
+  const saveNewExpense = async (expense: Expense) => {
+    if (travelId) {
+      await budgetApi.createBudget({
+        travel_id: travelId,
+        amount: expense.amount,
+        breakdown: {
+          category: expense.category,
+          title: expense.title,
+          type: expense.type
+        }
+      });
+      // 再取得
+      const budgets = await budgetApi.getBudgets(travelId, userId);
+      const loadedExpenses = budgets.map(b => ({
+        id: b.id,
+        date: b.created_at || '',
+        category: b.breakdown?.category || 'その他',
+        title: b.breakdown?.title || '',
+        amount: b.amount,
+        type: b.breakdown?.type || 'expense',
+      }));
+      setExpenses(loadedExpenses);
+    } else {
+      setExpenses([...expenses, expense]);
+    }
     setShowAddExpenseModal(false);
   };
 
   /**
    * 編集した支出を保存
    */
-  const saveEditedExpense = (expense: Expense) => {
-    setExpenses(expenses.map(e => e.id === expense.id ? expense : e));
+  const saveEditedExpense = async (expense: Expense) => {
+    if (travelId && expense.id) {
+      await budgetApi.updateBudget(expense.id, {
+        amount: expense.amount,
+        breakdown: {
+          category: expense.category,
+          title: expense.title,
+          type: expense.type
+        }
+      });
+      // 再取得
+      const budgets = await budgetApi.getBudgets(travelId, userId);
+      const loadedExpenses = budgets.map(b => ({
+        id: b.id,
+        date: b.created_at || '',
+        category: b.breakdown?.category || 'その他',
+        title: b.breakdown?.title || '',
+        amount: b.amount,
+        type: b.breakdown?.type || 'expense',
+      }));
+      setExpenses(loadedExpenses);
+    } else {
+      setExpenses(expenses.map(e => e.id === expense.id ? expense : e));
+    }
     setShowEditExpenseModal(false);
     setEditingExpense(null);
   };
@@ -169,9 +306,40 @@ const BudgetTab: React.FC<BudgetTabProps> = ({ budgetData }) => {
   /**
    * カテゴリ追加
    */
-  const addCategory = () => {
+  const addCategory = async () => {
     if (newCategory.trim() && !categories.includes(newCategory.trim())) {
-      setCategories([...categories, newCategory.trim()]);
+      const updatedCategories = [...categories, newCategory.trim()];
+      setCategories(updatedCategories);
+
+      // categoryBudgetsにも追加
+      const newBudget = { category: newCategory.trim(), amount: 0, isEditing: false };
+      const updatedBudgets = [...categoryBudgets, newBudget];
+      setCategoryBudgets(updatedBudgets);
+
+      // Supabaseにも保存
+      if (travelId) {
+        await travelApi.updateTravel(travelId, {
+          budget_breakdown: updatedBudgets.map(({ isEditing, ...rest }) => rest)
+        });
+        // 保存後に再取得して最新化
+        const travel = await travelApi.getTravel(travelId);
+        let breakdownArr = [];
+        if (Array.isArray(travel.budget_breakdown)) {
+          breakdownArr = travel.budget_breakdown.map((b) => {
+            const editing = categoryBudgets.find(cb => cb.category === b.category)?.isEditing || false;
+            return { ...b, isEditing: editing };
+          });
+        } else if (typeof travel.budget_breakdown === 'object' && travel.budget_breakdown !== null) {
+          breakdownArr = [
+            { category: '交通費', amount: travel.budget_breakdown.transportation || 0, isEditing: categoryBudgets.find(cb => cb.category === '交通費')?.isEditing || false },
+            { category: '宿泊費', amount: travel.budget_breakdown.accommodation || 0, isEditing: categoryBudgets.find(cb => cb.category === '宿泊費')?.isEditing || false },
+            { category: '食費', amount: travel.budget_breakdown.food || 0, isEditing: categoryBudgets.find(cb => cb.category === '食費')?.isEditing || false },
+            { category: '観光費', amount: travel.budget_breakdown.activities || 0, isEditing: categoryBudgets.find(cb => cb.category === '観光費')?.isEditing || false }
+          ];
+        }
+        setCategoryBudgets(breakdownArr);
+      }
+
       setNewCategory('');
       setShowAddCategoryModal(false);
     }
@@ -199,12 +367,14 @@ const BudgetTab: React.FC<BudgetTabProps> = ({ budgetData }) => {
         remainingBudget={remainingBudget}
         expenses={expenses}
         categoryBudgets={categoryBudgets}
+        travelId={travelId || ''}
+        onBudgetUpdate={(newBudget) => setTravelBudget(newBudget)}
       />
 
-      {/* AI推測カテゴリ別予算 */}
-      {budgetData && (
+      {/* カテゴリ別予算 */}
+      {travelId && (
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 dark:bg-gray-800 dark:border-gray-700">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">AI推測カテゴリ別予算</h3>
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">カテゴリ別予算</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             {categoryBudgets.map((budget) => (
               <div key={budget.category} className="border border-gray-200 rounded-lg p-4 dark:border-gray-700">
@@ -213,7 +383,11 @@ const BudgetTab: React.FC<BudgetTabProps> = ({ budgetData }) => {
                   {budget.isEditing ? (
                     <div className="flex gap-1">
                       <button
-                        onClick={() => saveBudget(budget.category, budget.amount)}
+                        onClick={() => {
+                          const newAmount = parseInt(editAmounts[budget.category], 10) || 0;
+                          saveBudget(budget.category, newAmount);
+                          setEditAmounts(prev => ({ ...prev, [budget.category]: undefined }));
+                        }}
                         className="text-green-600 hover:text-green-800"
                         aria-label="保存"
                       >
@@ -240,13 +414,14 @@ const BudgetTab: React.FC<BudgetTabProps> = ({ budgetData }) => {
                 {budget.isEditing ? (
                   <Input
                     type="number"
-                    value={budget.amount}
-                    onChange={(e) => {
-                      const newAmount = parseInt(e.target.value) || 0;
-                      setCategoryBudgets(prev => prev.map(b => 
-                        b.category === budget.category ? { ...b, amount: newAmount } : b
-                      ));
+                    value={editAmounts[budget.category] ?? ''}
+                    onChange={(value) => {
+                      setEditAmounts(prev => ({
+                        ...prev,
+                        [budget.category]: value
+                      }));
                     }}
+                    onFocus={(e) => e.target.select()}
                     className="w-full"
                     placeholder="予算を入力"
                   />

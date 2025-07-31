@@ -89,13 +89,16 @@ router.post('/generate-plan', async (req: Request, res: Response) => {
   try {
     const {
       destination,
+      departure,
+      arrival,
       startDate,
       endDate,
       memberCount,
       budget,
       interests,
       travelStyle,
-      description
+      description,
+      aiSuggestDestination
     } = req.body;
 
     // バリデーション
@@ -116,13 +119,16 @@ router.post('/generate-plan', async (req: Request, res: Response) => {
     const { generateTravelPlan } = await import('../services/aiService');
     const result = await generateTravelPlan({
       destination,
+      departure,
+      arrival,
       startDate,
       endDate,
       memberCount,
       budget,
       interests: interests || [],
       travelStyle: travelStyle || 'balanced',
-      description: description || ''
+      description: description || '',
+      aiSuggestDestination: !!aiSuggestDestination
     });
 
     if (result.success) {
@@ -333,7 +339,11 @@ router.delete('/:id', async (req: Request, res: Response) => {
 router.post('/ai/recommend', async (req, res) => {
   try {
     const prefs = req.body;
-    const { success, recommendations } = await (await import('../services/aiService')).generateRecommendations(prefs);
+    const result = await (await import('../services/aiService')).generateRecommendations(prefs);
+    if (!result) {
+      return res.status(500).json({ success: false, recommendations: [], message: 'AI推薦生成に失敗しました' });
+    }
+    const { success, recommendations } = result;
     res.json({ success, recommendations });
   } catch (error) {
     console.error('AI推薦APIエラー:', error);

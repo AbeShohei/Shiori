@@ -62,10 +62,7 @@ const DeleteConfirmModal: React.FC<DeleteConfirmModalProps> = ({
           </Button>
           <Button
             variant="danger"
-            onClick={() => {
-              onConfirm();
-              onClose();
-            }}
+            onClick={onConfirm}
           >
             削除
           </Button>

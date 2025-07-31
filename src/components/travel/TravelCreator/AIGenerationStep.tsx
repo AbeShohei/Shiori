@@ -1,11 +1,22 @@
 import React, { useEffect, useState } from 'react';
 import { Sparkles, RefreshCw, CheckCircle, AlertCircle } from 'lucide-react';
-import { travelApi, GeneratePlanRequest, GeneratedPlan } from '../../../services/api';
+import { travelApi } from '../../../services/travelApi';
 
 interface AIGenerationStepProps {
-  travelData: GeneratePlanRequest;
-  onPlanGenerated: (plan: GeneratedPlan) => void;
+  travelData: {
+    destination: string;
+    startDate: string;
+    endDate: string;
+    memberCount: number;
+    budget: number;
+    interests: string[];
+    travelStyle: string;
+    travelType: 'domestic' | 'international';
+    description?: string;
+  };
+  onPlanGenerated: (plan: any) => void;
   onError: (error: string) => void;
+  onManualCreate: () => void; // 追加
 }
 
 /**
@@ -15,7 +26,8 @@ interface AIGenerationStepProps {
 const AIGenerationStep: React.FC<AIGenerationStepProps> = ({
   travelData,
   onPlanGenerated,
-  onError
+  onError,
+  onManualCreate
 }) => {
   const [isGenerating, setIsGenerating] = useState(true);
   const [currentStep, setCurrentStep] = useState(0);
@@ -35,6 +47,7 @@ const AIGenerationStep: React.FC<AIGenerationStepProps> = ({
 
   const generatePlan = async () => {
     try {
+      console.log("AIGenerationStep travelData:", travelData);
       setIsGenerating(true);
       setError(null);
 
@@ -50,27 +63,43 @@ const AIGenerationStep: React.FC<AIGenerationStepProps> = ({
       }, 1000);
 
       // AIプランを生成
-      const response = await travelApi.generatePlan(travelData);
+      const planRequest = {
+        destination: travelData.destination || 'おすすめの目的地',
+        startDate: travelData.startDate,
+        endDate: travelData.endDate,
+        memberCount: travelData.memberCount,
+        budget: travelData.budget,
+        interests: travelData.interests,
+        travelStyle: travelData.travelStyle,
+        travelType: travelData.travelType,
+        description: travelData.description
+      };
+      
+      console.log("APIリクエスト送信", planRequest);
+      const response = await travelApi.generatePlan(planRequest);
 
       clearInterval(stepInterval);
       setCurrentStep(steps.length - 1);
 
       if (response.success) {
+        console.log("AI生成成功:", response.data);
         // 少し待ってから結果を返す（UXのため）
         setTimeout(() => {
-          onPlanGenerated(response.plan);
+          onPlanGenerated(response.data);
         }, 500);
       } else {
-        setError(response.error || 'AIプラン生成に失敗しました');
+        const errorMessage = response.error || 'AIプラン生成に失敗しました';
+        setError(errorMessage);
         setTimeout(() => {
-          onError(response.error || 'AIプラン生成に失敗しました');
+          onError(errorMessage);
         }, 2000);
       }
     } catch (error) {
       console.error('AIプラン生成エラー:', error);
-      setError('ネットワークエラーが発生しました');
+      const errorMessage = error instanceof Error ? error.message : 'ネットワークエラーが発生しました';
+      setError(errorMessage);
       setTimeout(() => {
-        onError('ネットワークエラーが発生しました');
+        onError(errorMessage);
       }, 2000);
     } finally {
       setIsGenerating(false);
@@ -97,18 +126,27 @@ const AIGenerationStep: React.FC<AIGenerationStepProps> = ({
             <p className="text-gray-600 mb-4">
               {error}
             </p>
+            <div className="flex flex-col gap-3">
             <button
               onClick={handleRetry}
               className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
             >
               再試行
             </button>
+              <button
+                onClick={onManualCreate}
+                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+              >
+                手動作成に切り替え
+              </button>
+            </div>
           </div>
         </div>
       </div>
     );
   }
 
+  console.log("AIGenerationStep mounted");
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center">
       <div className="bg-white p-8 rounded-lg shadow-lg max-w-md w-full mx-4 text-center">

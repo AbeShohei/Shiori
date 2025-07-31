@@ -1,5 +1,5 @@
 import React from 'react';
-import { Calendar, MapPin, Users, DollarSign, Edit3, Trash2, Eye, Star, Moon, Clock } from 'lucide-react';
+import { Calendar, MapPin, Users, DollarSign, Trash2, Eye, Moon } from 'lucide-react';
 import { Travel } from '../../../types/Travel';
 
 /**
@@ -43,110 +43,77 @@ const TravelCard: React.FC<TravelCardProps> = ({
     }
   };
 
-  /**
-   * 宿泊日数を計算
-   */
-  const getNightsCount = () => {
-    if (travel.duration) {
-      // "3泊4日" のような形式から宿泊日数を抽出
-      const match = travel.duration.match(/(\d+)泊/);
-      return match ? parseInt(match[1]) : 0;
-    }
-    return 0;
-  };
-
-  // 日付だけを抽出する関数
-  const getDateOnly = (dateString: string) => {
-    if (!dateString) return '';
-    return dateString.split('T')[0];
-  };
-
   const statusInfo = getStatusInfo(travel.status);
-  const nightsCount = getNightsCount();
 
   return (
     <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition-shadow dark:bg-gray-800 dark:border-gray-700 flex flex-col h-full">
-      {/* 画像エリア */}
-      <div className="relative">
-        <img 
-          src={travel.image} 
-          alt={travel.title}
-          className="w-full h-48 object-cover"
-        />
-        
+      {/* ヘッダーエリア */}
+      <div className="p-4 pb-2 relative">
         {/* ステータスバッジ */}
-        <div className="absolute top-3 left-3">
+        <div className="mb-3">
           <span className={`px-2 py-1 rounded-full text-xs font-medium ${statusInfo.color}`}>
             {statusInfo.label}
           </span>
         </div>
 
-        {/* 宿泊日数バッジ */}
-        {nightsCount > 0 && (
-          <div className="absolute top-3 right-3">
-            <div className="bg-white bg-opacity-90 backdrop-blur-sm px-2 py-1 rounded-full text-xs font-medium text-gray-700 flex items-center gap-1">
-              <Moon className="h-3 w-3" />
-              <span>{nightsCount}泊</span>
-            </div>
-          </div>
-        )}
+        {/* 編集・削除アイコンを右上にコンパクト配置 */}
+        <div className="absolute top-4 right-4 flex items-center gap-1 z-10">
+          <button
+            onClick={(e) => { e.stopPropagation(); onUpdate(travel); }}
+            className="p-1 text-gray-400 hover:text-blue-600 transition-colors"
+            aria-label="編集"
+          >
+            <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>
+          </button>
+          <button
+            onClick={(e) => { e.stopPropagation(); onDelete(travel.id); }}
+            className="p-1 text-gray-400 hover:text-red-600 transition-colors"
+            aria-label="削除"
+          >
+            <Trash2 className="h-4 w-4" />
+          </button>
       </div>
 
-      {/* コンテンツエリア */}
-      <div className="p-4 flex flex-col flex-1">
-        {/* ヘッダー */}
-        <div className="flex items-start justify-between mb-2">
-          <div className="min-w-0 flex-1">
+        {/* タイトル */}
+        <div className="mb-2">
             <h3 className="text-lg font-semibold text-gray-900 truncate dark:text-gray-100">{travel.title}</h3>
-            <p className="text-sm text-gray-600 dark:text-gray-300">{travel.destination}</p>
-          </div>
-          <div className="flex items-center gap-1 ml-2">
-            <Star className="h-4 w-4 text-yellow-500 fill-current dark:text-yellow-400" />
-            <span className="text-sm font-medium text-gray-900 dark:text-gray-100">{travel.rating}</span>
-          </div>
         </div>
         
         {/* 説明 */}
-        <p className="text-sm text-gray-700 mb-3 line-clamp-2 dark:text-gray-200">{travel.description}</p>
+        <p className="text-sm text-gray-700 mb-3 line-clamp-2 min-h-[40px] dark:text-gray-200">
+          {travel.description?.trim() ? travel.description : "説明未設定"}
+        </p>
+      </div>
         
-        {/* 基本情報 */}
-        <div className="space-y-2 mb-4">
-          <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+      {/* コンテンツエリア */}
+      <div className="px-4 pb-4 flex flex-col flex-1">
+        {/* 基本情報（コンパクト横並び・等サイズ） */}
+        <div className="flex flex-wrap gap-x-4 gap-y-2 mb-4 text-sm text-gray-600 dark:text-gray-400 items-center">
+          <div className="flex items-center gap-1">
             <MapPin className="h-4 w-4" />
-            <span>{travel.destination}</span>
+            <span>{travel.destination && travel.destination.trim() ? travel.destination : '未設定'}</span>
           </div>
-          <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+          <div className="flex items-center gap-1">
             <Calendar className="h-4 w-4" />
             <span>{travel.dates}</span>
+            {travel.duration && (
+              <span className="ml-2 flex items-center gap-1 text-sm text-gray-500 dark:text-gray-300">
+                ／ {travel.duration}
+              </span>
+            )}
           </div>
-          <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+          <div className="flex items-center gap-1">
             <Users className="h-4 w-4" />
-            <span>{travel.memberCount}名</span>
-          </div>
-          <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+            <span>{travel.member_count || travel.memberCount}名</span>
+            <span className="ml-2 flex items-center gap-1 text-sm text-gray-500 dark:text-gray-300">
             <DollarSign className="h-4 w-4" />
-            <span>¥{travel.budget.toLocaleString()}</span>
+              ¥{travel.budget.toLocaleString()}
+            </span>
           </div>
-          {nightsCount > 0 && (
-            <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
-              <Moon className="h-4 w-4" />
-              <span>{nightsCount}泊</span>
-            </div>
-          )}
         </div>
-        
         {/* フッター */}
         <div className="flex flex-col mt-auto">
           <div className="pt-3 border-t border-gray-100 dark:border-gray-700">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-1 text-sm text-gray-500 dark:text-gray-400">
-                <Star className="h-4 w-4 text-yellow-400 fill-current" />
-                <span>4.8</span>
-              </div>
-              <span className="text-xs text-gray-400 dark:text-gray-500 text-right min-w-[90px]">
-                更新: {getDateOnly(travel.updatedAt)}
-              </span>
-            </div>
             <div className="flex gap-2 w-full">
               <button
                 onClick={() => onSelect(travel)}
@@ -154,13 +121,6 @@ const TravelCard: React.FC<TravelCardProps> = ({
               >
                 <Eye className="h-4 w-4" />
                 詳細を見る
-              </button>
-              <button
-                onClick={() => onDelete(travel.id)}
-                className="flex-1 flex items-center justify-center gap-1 px-3 py-2 h-10 bg-red-50 text-red-600 text-sm rounded-lg hover:bg-red-100 transition-colors dark:bg-red-900 dark:text-red-400 dark:hover:bg-red-800"
-              >
-                <Trash2 className="h-4 w-4" />
-                削除
               </button>
             </div>
           </div>

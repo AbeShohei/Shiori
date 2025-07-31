@@ -1,6 +1,7 @@
 import React from 'react';
 import { Plus, Edit3, ChevronUp, ChevronDown } from 'lucide-react';
 import ScheduleItemComponent from './ScheduleItem';
+import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 
 /**
  * スケジュールアイテムの型定義
@@ -35,6 +36,7 @@ interface DaySchedule {
  * @param onDeleteItem - アイテム削除時のコールバック
  * @param onEditDay - 日付編集時のコールバック
  * @param onReorderItems - アイテム並び替え時のコールバック
+ * @param onNavigate - タブ遷移時のコールバック
  */
 interface DayScheduleProps {
   day: DaySchedule;
@@ -44,6 +46,7 @@ interface DayScheduleProps {
   onDeleteItem: (itemId: string, dayIndex: number) => void;
   onEditDay: (day: DaySchedule, dayIndex: number) => void;
   onReorderItems?: (newItems: ScheduleItem[], dayIndex: number) => void;
+  onNavigate?: (tab: string, id?: string) => void;
 }
 
 /**
@@ -57,7 +60,8 @@ const MovableScheduleItem: React.FC<{
   onDelete: (itemId: string) => void;
   onMoveUp: () => void;
   onMoveDown: () => void;
-}> = ({ item, isFirst, isLast, onEdit, onDelete, onMoveUp, onMoveDown }) => {
+  onNavigate?: (tab: string, id?: string) => void;
+}> = ({ item, isFirst, isLast, onEdit, onDelete, onMoveUp, onMoveDown, onNavigate }) => {
   const [isHovered, setIsHovered] = React.useState(false);
 
   return (
@@ -72,6 +76,7 @@ const MovableScheduleItem: React.FC<{
         isLast={isLast}
         onEdit={onEdit}
         onDelete={onDelete}
+        onNavigate={onNavigate}
       />
       
       {/* 移動ボタン */}
@@ -112,8 +117,12 @@ const DayScheduleComponent: React.FC<DayScheduleProps> = ({
   onEditItem,
   onDeleteItem,
   onEditDay,
-  onReorderItems
+  onReorderItems,
+  onNavigate
 }) => {
+  // 開閉トグル用state
+  const [isOpen, setIsOpen] = React.useState(true);
+
   // アイテムを上に移動
   const handleMoveUp = (index: number) => {
     if (index > 0) {
@@ -136,81 +145,122 @@ const DayScheduleComponent: React.FC<DayScheduleProps> = ({
     }
   };
 
+  // DnDハンドラ
+  const handleDragEnd = (result: DropResult) => {
+    if (!result.destination) return;
+    const newItems = Array.from(day.items);
+    const [removed] = newItems.splice(result.source.index, 1);
+    newItems.splice(result.destination.index, 0, removed);
+    if (onReorderItems) {
+      onReorderItems(newItems, dayIndex);
+    }
+  };
+
   return (
     <div className="bg-white rounded-lg shadow-sm border border-gray-200">
       {/* ヘッダー */}
-      <div className="p-6 border-b border-gray-200 relative">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
-          <div className="flex-1 min-w-0">
-            <div className="flex flex-row items-center gap-2 md:gap-6">
-              <div className="flex flex-col gap-1 min-w-fit">
-                <div className="flex items-center gap-2">
-                  <h3 className="text-lg font-semibold text-gray-900">{day.day}</h3>
-                  <button 
-                    onClick={() => onEditDay(day, dayIndex)}
-                    className="p-1 text-gray-400 hover:text-blue-600 transition-colors"
-                    aria-label="日程タイトルを編集"
-                  >
-                    <Edit3 className="h-4 w-4" />
-                  </button>
-                </div>
-                <p className="text-sm text-gray-500">{day.date}</p>
+      <div className="p-6 border-b border-gray-200 relative flex items-center justify-between">
+        {/* トグルアイコン（左端） */}
+        <button
+          className="mr-4 flex-shrink-0 p-1 rounded hover:bg-gray-100"
+          onClick={() => setIsOpen((prev) => !prev)}
+          aria-label={isOpen ? '折りたたむ' : '展開する'}
+        >
+          {isOpen ? <ChevronUp className="w-6 h-6 text-gray-400" /> : <ChevronDown className="w-6 h-6 text-gray-400" />}
+        </button>
+        <div className="flex-1 min-w-0">
+          <div className="flex flex-row items-center gap-2 md:gap-6">
+            <div className="flex flex-col gap-1 min-w-fit">
+              <div className="flex items-center gap-2">
+                <h3 className="text-lg font-semibold text-gray-900">{day.day}</h3>
+                <button 
+                  onClick={() => onEditDay(day, dayIndex)}
+                  className="p-1 text-gray-400 hover:text-blue-600 transition-colors"
+                  aria-label="日程タイトルを編集"
+                >
+                  <Edit3 className="h-4 w-4" />
+                </button>
               </div>
-              {day.dayTitle && (
-                <div className="flex flex-col">
-                  <h4 className="text-md font-medium text-gray-800">{day.dayTitle}</h4>
-                  {day.daySubtitle && (
-                    <span className="text-sm text-gray-600">{day.daySubtitle}</span>
+              <p className="text-sm text-gray-500">{day.date}</p>
+            </div>
+            {day.dayTitle && (
+              <div className="flex flex-col">
+                <h4 className="text-md font-medium text-gray-800">{day.dayTitle}</h4>
+                {day.daySubtitle && (
+                  <span className="text-sm text-gray-600">{day.daySubtitle}</span>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+        {/* 追加ボタン（右端） */}
+        <div className="flex items-center ml-2">
+          {/* スマホ：丸アイコンボタン */}
+          <button
+            onClick={() => onAddItem(dayIndex)}
+            className="flex items-center justify-center bg-blue-600 text-white rounded-full w-10 h-10 shadow-md hover:bg-blue-700 transition-colors md:hidden"
+            aria-label="予定を追加"
+          >
+            <Plus className="h-5 w-5" />
+          </button>
+          {/* PC：従来のボタン */}
+          <button 
+            onClick={() => onAddItem(dayIndex)}
+            className="hidden md:flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            <Plus className="h-4 w-4" />
+            <span>予定を追加</span>
+          </button>
+        </div>
+      </div>
+      {/* スケジュールアイテム一覧（開いているときのみ表示） */}
+      {isOpen && (
+        <div className="p-6">
+          <DragDropContext onDragEnd={handleDragEnd}>
+            <Droppable droppableId={`droppable-day-${dayIndex}`}> 
+              {(provided) => (
+                <div ref={provided.innerRef} {...provided.droppableProps}>
+                  {day.items.length > 0 ? (
+                    day.items.map((item, idx) => (
+                      <Draggable key={item.id} draggableId={item.id} index={idx}>
+                        {(provided, snapshot) => (
+                          <div
+                            ref={provided.innerRef}
+                            {...provided.draggableProps}
+                            {...provided.dragHandleProps}
+                            style={{
+                              ...provided.draggableProps.style,
+                              opacity: snapshot.isDragging ? 0.7 : 1,
+                              marginBottom: 8
+                            }}
+                          >
+                            <MovableScheduleItem
+                              item={item}
+                              isFirst={idx === 0}
+                              isLast={idx === day.items.length - 1}
+                              onEdit={(item) => onEditItem(item, dayIndex)}
+                              onDelete={(itemId) => onDeleteItem(itemId, dayIndex)}
+                              onMoveUp={() => {}}
+                              onMoveDown={() => {}}
+                              onNavigate={onNavigate}
+                            />
+                          </div>
+                        )}
+                      </Draggable>
+                    ))
+                  ) : (
+                    <div className="text-center py-8 text-gray-500">
+                      <p>予定がありません</p>
+                      <p className="text-sm mt-1">「予定を追加」ボタンから予定を追加してください</p>
+                    </div>
                   )}
+                  {provided.placeholder}
                 </div>
               )}
-            </div>
-          </div>
-          <div className="absolute right-6 top-1/2 -translate-y-1/2 w-auto flex justify-end">
-            {/* スマホ：丸アイコンボタン */}
-            <button
-              onClick={() => onAddItem(dayIndex)}
-              className="flex items-center justify-center bg-blue-600 text-white rounded-full w-10 h-10 shadow-md hover:bg-blue-700 transition-colors md:hidden"
-              aria-label="予定を追加"
-            >
-              <Plus className="h-5 w-5" />
-            </button>
-            {/* PC：従来のボタン */}
-            <button 
-              onClick={() => onAddItem(dayIndex)}
-              className="hidden md:flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-            >
-              <Plus className="h-4 w-4" />
-              <span>予定を追加</span>
-            </button>
-          </div>
+            </Droppable>
+          </DragDropContext>
         </div>
-      </div>
-      
-      {/* スケジュールアイテム一覧 */}
-      <div className="p-6">
-        <div className="space-y-0">
-          {day.items.length > 0 ? (
-            day.items.map((item, idx) => (
-              <MovableScheduleItem
-                key={item.id}
-                item={item}
-                isFirst={idx === 0}
-                isLast={idx === day.items.length - 1}
-                onEdit={(item) => onEditItem(item, dayIndex)}
-                onDelete={(itemId) => onDeleteItem(itemId, dayIndex)}
-                onMoveUp={() => handleMoveUp(idx)}
-                onMoveDown={() => handleMoveDown(idx)}
-              />
-            ))
-          ) : (
-            <div className="text-center py-8 text-gray-500">
-              <p>予定がありません</p>
-              <p className="text-sm mt-1">「予定を追加」ボタンから予定を追加してください</p>
-            </div>
-          )}
-        </div>
-      </div>
+      )}
     </div>
   );
 };

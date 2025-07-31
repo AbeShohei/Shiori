@@ -1,19 +1,23 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import Input from '../../common/Input';
 import Button from '../../common/Button';
 import { TravelFormData } from '../../../types/Travel';
+import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
+import EditIcon from '@mui/icons-material/Edit';
 
 /**
  * 旅行フォームコンポーネントのプロパティ
  * 
  * @param formData - フォームデータ
  * @param onFormDataChange - フォームデータ変更時のコールバック
- * @param onNext - 次へ進むボタンクリック時のコールバック
+ * @param onNext - AIプラン作成ボタンクリック時のコールバック
+ * @param onManualCreate - 手動作成ボタンクリック時のコールバック
  */
 interface TravelFormProps {
   formData: TravelFormData;
   onFormDataChange: (data: TravelFormData) => void;
   onNext: () => void;
+  onManualCreate: () => void;
 }
 
 /**
@@ -23,7 +27,8 @@ interface TravelFormProps {
 const TravelForm: React.FC<TravelFormProps> = ({
   formData,
   onFormDataChange,
-  onNext
+  onNext,
+  onManualCreate
 }) => {
   /**
    * 興味オプションの定義
@@ -125,14 +130,13 @@ const TravelForm: React.FC<TravelFormProps> = ({
   };
 
   /**
-   * フォームのバリデーション
+   * フォームのバリデーション（AIプラン生成に必要な項目だけ）
    */
   const isFormValid = () => {
     const dateValidation = validateDates();
-    
     return (
-      formData.title.trim() !== '' &&
-      formData.destination.trim() !== '' &&
+      (formData.departure || '').trim() !== '' &&
+      (formData.arrival || '').trim() !== '' &&
       formData.startDate !== '' &&
       formData.endDate !== '' &&
       formData.memberCount > 0 &&
@@ -155,6 +159,54 @@ const TravelForm: React.FC<TravelFormProps> = ({
     return formData.endDate || '';
   };
 
+  const today = new Date();
+  const tomorrow = new Date();
+  tomorrow.setDate(today.getDate() + 1);
+
+  const formatDate = (date: Date) => date.toISOString().split('T')[0];
+
+  // 出発地と到着地が同じかどうかのstate
+  const [samePlace, setSamePlace] = useState(true);
+
+  // 初期値セット
+  useEffect(() => {
+    let changed = false;
+    let newData = { ...formData };
+    if (!formData.startDate) {
+      newData.startDate = formatDate(today);
+      changed = true;
+    }
+    if (!formData.endDate) {
+      newData.endDate = formatDate(tomorrow);
+      changed = true;
+    }
+    if (!formData.arrival) {
+      newData.arrival = formData.departure;
+      changed = true;
+    }
+    if (changed) {
+      onFormDataChange(newData);
+    }
+    // eslint-disable-next-line
+  }, []);
+
+  // 出発地変更時、同じなら到着地も同期
+  const handleDepartureChange = (value: string) => {
+    if (samePlace) {
+      onFormDataChange({ ...formData, departure: value, arrival: value });
+    } else {
+      onFormDataChange({ ...formData, departure: value });
+    }
+  };
+
+  // 同じチェック切り替え時
+  const handleSamePlaceToggle = (checked: boolean) => {
+    setSamePlace(checked);
+    if (checked) {
+      onFormDataChange({ ...formData, arrival: formData.departure });
+    }
+  };
+
   const dateValidation = validateDates();
   const { days, nights } = calculateTravelDuration();
 
@@ -173,15 +225,55 @@ const TravelForm: React.FC<TravelFormProps> = ({
             required
           />
 
-          {/* 目的地 */}
+          {/* 出発地 */}
           <Input
-            label="目的地"
-            value={formData.destination}
-            onChange={(value) => handleInputChange('destination', value)}
-            placeholder="例: 沖縄県"
+            label="出発地"
+            value={formData.departure}
+            onChange={handleDepartureChange}
+            placeholder="例: 東京駅"
             required
           />
-
+          {/* 出発地と到着地が同じか */}
+          <div className="flex items-center gap-2 mb-2">
+            <input
+              type="checkbox"
+              id="samePlace"
+              checked={samePlace}
+              onChange={e => handleSamePlaceToggle(e.target.checked)}
+            />
+            <label htmlFor="samePlace">出発地と到着地は同じ</label>
+          </div>
+          {/* 到着地（同じでない場合のみ表示） */}
+          {!samePlace && (
+            <Input
+              label="到着地"
+              value={formData.arrival}
+              onChange={value => onFormDataChange({ ...formData, arrival: value })}
+              placeholder="例: 大阪駅"
+              required
+            />
+          )}
+          {/* 目的地（空欄でもOK） */}
+          <Input
+            label="目的地（空欄の場合はAIが提案）"
+            value={formData.destination || ''}
+            onChange={value => onFormDataChange({ ...formData, destination: value })}
+            placeholder="例: 京都、沖縄、北海道 など（空欄可）"
+          />
+          {/* 移動手段（記入式） */}
+          <Input
+            label="移動手段"
+            value={formData.transportation}
+            onChange={value => onFormDataChange({ ...formData, transportation: value })}
+            placeholder="例: ドライブ、電車、バスなど自由記入"
+          />
+          {/* 観光テーマ（記入式） */}
+          <Input
+            label="観光テーマ"
+            value={formData.theme}
+            onChange={value => onFormDataChange({ ...formData, theme: value })}
+            placeholder="例: グルメ、絶景、温泉、歴史、アートなど自由記入"
+          />
           {/* 日付 */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Input
@@ -189,8 +281,7 @@ const TravelForm: React.FC<TravelFormProps> = ({
               type="date"
               value={formData.startDate}
               onChange={(value) => handleInputChange('startDate', value)}
-              min={new Date().toISOString().split('T')[0]}
-              max={getMaxStartDate()}
+              min={formatDate(today)}
               required
             />
             <Input
@@ -198,7 +289,7 @@ const TravelForm: React.FC<TravelFormProps> = ({
               type="date"
               value={formData.endDate}
               onChange={(value) => handleInputChange('endDate', value)}
-              min={getMinEndDate()}
+              min={formData.startDate || formatDate(today)}
               required
             />
           </div>
@@ -246,6 +337,43 @@ const TravelForm: React.FC<TravelFormProps> = ({
               min={0}
               required
             />
+          </div>
+
+          {/* 旅行タイプ */}
+          <div className="space-y-3">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+              旅行タイプ
+            </label>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <label className="flex items-start gap-3 p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer dark:border-gray-700 dark:hover:bg-gray-700">
+                <input
+                  type="radio"
+                  name="travelType"
+                  value="domestic"
+                  checked={formData.travelType === 'domestic'}
+                  onChange={(e) => handleInputChange('travelType', e.target.value)}
+                  className="mt-1"
+                />
+                <div>
+                  <div className="font-medium text-gray-900 dark:text-gray-100">国内旅行</div>
+                  <div className="text-sm text-gray-600 dark:text-gray-400">日本国内の旅行</div>
+                </div>
+              </label>
+              <label className="flex items-start gap-3 p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer dark:border-gray-700 dark:hover:bg-gray-700">
+                <input
+                  type="radio"
+                  name="travelType"
+                  value="international"
+                  checked={formData.travelType === 'international'}
+                  onChange={(e) => handleInputChange('travelType', e.target.value)}
+                  className="mt-1"
+                />
+                <div>
+                  <div className="font-medium text-gray-900 dark:text-gray-100">海外旅行</div>
+                  <div className="text-sm text-gray-600 dark:text-gray-400">海外への旅行</div>
+                </div>
+              </label>
+            </div>
           </div>
 
           {/* 興味 */}
@@ -312,15 +440,25 @@ const TravelForm: React.FC<TravelFormProps> = ({
             />
           </div>
 
-          {/* 次へボタン */}
-          <div className="flex justify-end pt-6">
+          {/* 作成方法選択ボタン */}
+          <div className="flex justify-end gap-4 pt-6">
+            <Button
+              variant="secondary"
+              size="lg"
+              onClick={() => { console.log("Manual creation clicked"); onManualCreate(); }}
+              disabled={!isFormValid()}
+            >
+              <EditIcon className="h-5 w-5 mr-2" />
+              手動で作成
+            </Button>
             <Button
               variant="primary"
               size="lg"
-              onClick={onNext}
+              onClick={() => { console.log("AI creation clicked"); onNext(); }}
               disabled={!isFormValid()}
             >
-              AIでプラン生成
+              <AutoAwesomeIcon className="h-5 w-5 mr-2" />
+              AIでプラン作成
             </Button>
           </div>
         </div>

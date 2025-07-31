@@ -8,8 +8,8 @@ interface TabNavigationProps {
 
 const tabs = [
   { id: 'schedule', label: 'スケジュール', icon: Calendar },
-  { id: 'places', label: '場所', icon: MapPin },
-  { id: 'ai-recommendations', label: 'AI提案', icon: Sparkles },
+  { id: 'places', label: '観光スポット', icon: MapPin },
+  // { id: 'ai-recommendations', label: 'AI提案', icon: Sparkles },
   { id: 'budget', label: '予算', icon: DollarSign },
   { id: 'room-assignment', label: '部屋割り', icon: Users },
   { id: 'packing', label: '持ち物', icon: Package },
@@ -18,7 +18,7 @@ const tabs = [
 
 const TabNavigation: React.FC<TabNavigationProps> = ({ activeTab, onTabChange }) => {
   return (
-    <div className="bg-white shadow-sm border-b border-gray-200 dark:bg-gray-800 dark:border-gray-700">
+    <div className="bg-white shadow-sm border-b border-gray-200 dark:bg-gray-800 dark:border-gray-700 z-40 relative">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex overflow-x-auto">
           {tabs.map((tab) => {
